@@ -1,4 +1,4 @@
-package com.nancheung.plugins.jetbrains.legadoreader.ui;
+package com.nancheung.plugins.jetbrains.legadoreader.presentation.common;
 
 import com.intellij.openapi.application.ApplicationManager;
 import com.nancheung.plugins.jetbrains.legadoreader.event.*;
@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
  * UI 事件订阅器基类
  * 提供事件分发和 EDT 线程保证
  * 所有 UI 组件都应该继承此类并订阅事件
+ * 必须在子类构造函数中调用 super() 来激活订阅
+ * 需要消费什么事件就重写对应的方法
  *
  * @author NanCheung
  */
@@ -47,16 +49,16 @@ public abstract class UIEventSubscriber implements ReaderEventListener {
 
     /**
      * 分发事件到具体处理方法
-     * 使用 Java 21 的模式匹配简化类型判断
      *
      * @param event 事件对象
      */
-    protected void dispatchEvent(ReaderEvent event) {
+    private void dispatchEvent(ReaderEvent event) {
         switch (event) {
             case CommandEvent e -> onCommandEvent(e);
             case BookshelfEvent e -> onBookshelfEvent(e);
             case ReadingEvent e -> onReadingEvent(e);
             case PaginationEvent e -> onPaginationEvent(e);
+            case SettingsChangedEvent e -> onSettingsChangedEvent(e);
         }
     }
 
@@ -97,6 +99,16 @@ public abstract class UIEventSubscriber implements ReaderEventListener {
      * @param event 分页事件
      */
     protected void onPaginationEvent(PaginationEvent event) {
+        // 子类可选择性重写
+    }
+
+    /**
+     * 处理设置变更事件
+     * 用于响应用户在设置页面的修改
+     *
+     * @param event 设置变更事件
+     */
+    protected void onSettingsChangedEvent(SettingsChangedEvent event) {
         // 子类可选择性重写
     }
 }

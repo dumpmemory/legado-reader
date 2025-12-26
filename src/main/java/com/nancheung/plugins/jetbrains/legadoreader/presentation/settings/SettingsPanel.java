@@ -1,4 +1,4 @@
-package com.nancheung.plugins.jetbrains.legadoreader.gui.ui;
+package com.nancheung.plugins.jetbrains.legadoreader.presentation.settings;
 
 import com.intellij.openapi.editor.colors.EditorColorsManager;
 import com.intellij.openapi.editor.colors.EditorFontType;
@@ -24,7 +24,7 @@ import java.awt.event.MouseEvent;
 import java.util.Arrays;
 
 @Getter
-public class SettingUI {
+public class SettingsPanel {
 
     // ==================== 常量 ====================
     private static final String FONT_PREVIEW_TEXT = """
@@ -51,7 +51,7 @@ public class SettingUI {
     private JTextPane fontPreviewPane;
 
     // ==================== 构造函数 ====================
-    public SettingUI() {
+    public SettingsPanel() {
         // 1. 创建所有组件
         createComponents();
 

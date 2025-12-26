@@ -1,4 +1,4 @@
-package com.nancheung.plugins.jetbrains.legadoreader.toolwindow;
+package com.nancheung.plugins.jetbrains.legadoreader.presentation.toolwindow;
 
 import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.ActionToolbar;
@@ -20,6 +20,8 @@ import com.nancheung.plugins.jetbrains.legadoreader.event.PaginationEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.event.ReaderEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.event.ReaderEventListener;
 import com.nancheung.plugins.jetbrains.legadoreader.event.ReadingEvent;
+import com.nancheung.plugins.jetbrains.legadoreader.event.SettingsChangedEvent;
+import com.nancheung.plugins.jetbrains.legadoreader.presentation.common.UIEventSubscriber;
 import com.nancheung.plugins.jetbrains.legadoreader.manager.ReadingSessionManager;
 import com.nancheung.plugins.jetbrains.legadoreader.model.ReadingSession;
 import com.nancheung.plugins.jetbrains.legadoreader.service.IPaginationManager;
@@ -45,7 +47,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Getter
-public class IndexUI {
+public class MainReaderPanel extends UIEventSubscriber {
 
     // ==================== 卡片常量 ====================
     private static final String CARD_BOOKSHELF = "BOOKSHELF";
@@ -101,7 +103,7 @@ public class IndexUI {
     public static final DefaultComboBoxModel<String> ADDRESS_HISTORY_BOX_MODEL = new DefaultComboBoxModel<>();
 
     // ==================== 单例实例 ====================
-    private static IndexUI INSTANCE;
+    private static MainReaderPanel INSTANCE;
 
     // ==================== 书架数据 ====================
     private Map<String, BookDTO> bookshelf;
@@ -115,7 +117,9 @@ public class IndexUI {
             """;
 
     // ==================== 构造函数 ====================
-    public IndexUI() {
+    public MainReaderPanel() {
+        super();  // 自动订阅事件
+
         // 1. 创建 UI 组件
         createRootPanel();
 
@@ -125,10 +129,7 @@ public class IndexUI {
         // 3. 绑定事件监听器
         bindEventListeners();
 
-        // 4. 订阅阅读事件
-        subscribeToReaderEvents();
-
-        // 5. 初始加载书架
+        // 4. 初始加载书架
         initialLoadBookshelf();
     }
 
@@ -321,23 +322,6 @@ public class IndexUI {
     }
 
     /**
-     * 订阅阅读事件
-     */
-    private void subscribeToReaderEvents() {
-        ApplicationManager.getApplication()
-                .getMessageBus()
-                .connect()
-                .subscribe(ReaderEventListener.TOPIC, (ReaderEventListener) event -> {
-                    switch (event) {
-                        case ReadingEvent e -> INSTANCE.onReadingEvent(e);
-                        case PaginationEvent e -> INSTANCE.onPaginationEvent(e);
-                        default -> {
-                        }
-                    }
-                });
-    }
-
-    /**
      * 初始加载书架
      */
     private void initialLoadBookshelf() {
@@ -511,9 +495,9 @@ public class IndexUI {
     /**
      * 获取单例实例
      */
-    public static IndexUI getInstance() {
+    public static MainReaderPanel getInstance() {
         if (INSTANCE == null) {
-            INSTANCE = new IndexUI();
+            INSTANCE = new MainReaderPanel();
         }
         return INSTANCE;
     }
@@ -529,17 +513,16 @@ public class IndexUI {
     // ==================== 事件处理方法 ====================
 
     /**
-     * 阅读事件分发器
+     * 重写父类方法：处理阅读事件
      */
-    public void onReadingEvent(ReadingEvent event) {
-        ApplicationManager.getApplication().invokeLater(() -> {
-            switch (event.type()) {
-                case CHAPTER_LOADING -> handleLoadingStarted(event);
-                case CHAPTER_LOADED -> handleLoadingSuccess(event);
-                case CHAPTER_LOAD_FAILED -> handleLoadingFailed(event);
-                case SESSION_ENDED -> handleSessionEnded();
-            }
-        });
+    @Override
+    protected void onReadingEvent(ReadingEvent event) {
+        switch (event.type()) {
+            case CHAPTER_LOADING -> handleLoadingStarted(event);
+            case CHAPTER_LOADED -> handleLoadingSuccess(event);
+            case CHAPTER_LOAD_FAILED -> handleLoadingFailed(event);
+            case SESSION_ENDED -> handleSessionEnded();
+        }
     }
 
     /**
@@ -557,62 +540,104 @@ public class IndexUI {
     }
 
     /**
-     * 处理分页事件
+     * 重写父类方法：处理分页事件
      */
-    private void onPaginationEvent(PaginationEvent event) {
-        ApplicationManager.getApplication().invokeLater(() -> {
-            // 只处理页码变更事件（PAGE_CHANGED）
-            if (event.type() != PaginationEvent.PaginationEventType.PAGE_CHANGED) {
-                return;
-            }
+    @Override
+    protected void onPaginationEvent(PaginationEvent event) {
+        // 只处理页码变更事件（PAGE_CHANGED）
+        if (event.type() != PaginationEvent.PaginationEventType.PAGE_CHANGED) {
+            return;
+        }
 
-            // 如果正文面板不可见，跳过（用户可能在书架）
-            if (!textBodyPanel.isVisible()) {
-                log.debug("正文面板不可见，跳过光标同步");
-                return;
-            }
+        // 如果正文面板不可见，跳过（用户可能在书架）
+        if (!textBodyPanel.isVisible()) {
+            log.debug("正文面板不可见，跳过光标同步");
+            return;
+        }
 
-            // 获取当前页数据
-            PaginationManager paginationManager = PaginationManager.getInstance();
-            IPaginationManager.PageData currentPage = paginationManager.getCurrentPage();
+        // 获取当前页数据
+        PaginationManager paginationManager = PaginationManager.getInstance();
+        IPaginationManager.PageData currentPage = paginationManager.getCurrentPage();
 
-            if (currentPage == null || currentPage.startPos() < 0) {
-                log.warn("分页事件但无当前页数据或起始位置无效");
-                return;
-            }
+        if (currentPage == null || currentPage.startPos() < 0) {
+            log.warn("分页事件但无当前页数据或起始位置无效");
+            return;
+        }
 
-            // 获取当前阅读会话以获取标题
-            ReadingSession session = ReadingSessionManager.getInstance().getSession();
-            if (session == null || session.currentContent() == null) {
-                log.debug("无当前阅读会话，跳过光标同步");
-                return;
-            }
+        // 获取当前阅读会话以获取标题
+        ReadingSession session = ReadingSessionManager.getInstance().getSession();
+        if (session == null || session.currentContent() == null) {
+            log.debug("无当前阅读会话，跳过光标同步");
+            return;
+        }
 
-            // 计算标题长度（标题 + 换行符）
-            String title = session.chapters().get(session.currentChapterIndex()).getTitle();
-            int titleLength = (title != null && !title.isEmpty()) ? title.length() + 1 : 0;
+        // 计算标题长度（标题 + 换行符）
+        String title = session.chapters().get(session.currentChapterIndex()).getTitle();
+        int titleLength = (title != null && !title.isEmpty()) ? title.length() + 1 : 0;
 
-            // 计算光标位置
-            int caretPosition = titleLength + currentPage.startPos();
+        // 计算光标位置
+        int caretPosition = titleLength + currentPage.startPos();
 
-            // 限制在有效范围内
-            String currentText = textBodyPane.getText();
-            caretPosition = Math.min(caretPosition, currentText.length());
+        // 限制在有效范围内
+        String currentText = textBodyPane.getText();
+        caretPosition = Math.min(caretPosition, currentText.length());
 
-            // 设置光标位置
-            textBodyPane.setCaretPosition(caretPosition);
+        // 设置光标位置
+        textBodyPane.setCaretPosition(caretPosition);
 
-            // 滚动到光标位置（确保光标可见）
-            try {
-                Rectangle viewRect = textBodyPane.modelToView2D(caretPosition).getBounds();
-                textBodyPane.scrollRectToVisible(viewRect);
-            } catch (javax.swing.text.BadLocationException e) {
-                log.debug("滚动到光标位置失败: {}", e.getMessage());
-            }
+        // 滚动到光标位置（确保光标可见）
+        try {
+            Rectangle viewRect = textBodyPane.modelToView2D(caretPosition).getBounds();
+            textBodyPane.scrollRectToVisible(viewRect);
+        } catch (javax.swing.text.BadLocationException e) {
+            log.debug("滚动到光标位置失败: {}", e.getMessage());
+        }
 
-            log.debug("光标同步完成：页码 {}/{}, 光标位置 {}",
-                    event.currentPage(), event.totalPages(), caretPosition);
-        });
+        log.debug("光标同步完成：页码 {}/{}, 光标位置 {}",
+                event.currentPage(), event.totalPages(), caretPosition);
+    }
+
+    /**
+     * 重写父类方法：处理设置变更事件
+     * 当用户在设置页面保存字体设置后，立即刷新 UI
+     */
+    @Override
+    protected void onSettingsChangedEvent(SettingsChangedEvent event) {
+        // 只处理字体设置变更
+        if (event.type() != SettingsChangedEvent.SettingsChangedType.FONT_SETTINGS
+                && event.type() != SettingsChangedEvent.SettingsChangedType.ALL_SETTINGS) {
+            return;
+        }
+
+        log.info("收到设置变更事件，刷新正文面板字体样式");
+
+        // 只有在正文面板可见且有内容时才更新
+        if (!textBodyPanel.isVisible()) {
+            log.debug("正文面板不可见，跳过字体刷新");
+            return;
+        }
+
+        ReadingSession session = ReadingSessionManager.getInstance().getSession();
+        if (session == null || session.currentContent() == null) {
+            log.debug("无当前阅读会话，跳过字体刷新");
+            return;
+        }
+
+        // 从事件中获取新设置（优先使用事件中的值，回退到存储）
+        PluginSettingsStorage storage = PluginSettingsStorage.getInstance();
+        Color fontColor = event.fontColor() != null ? event.fontColor() : storage.getTextBodyFontColor();
+        Font font = event.font() != null ? event.font() : storage.getTextBodyFont();
+        double lineHeight = event.lineHeight() != null ? event.lineHeight() : storage.getTextBodyLineHeight();
+
+        // 更新正文面板的字体样式
+        textBodyPane.setForeground(new JBColor(fontColor, fontColor));
+        textBodyPane.setFont(font);
+
+        // 重新应用行高（在已有内容的基础上）
+        applyLineHeight(textBodyPane, lineHeight);
+
+        log.debug("字体样式已更新：color={}, font={}, lineHeight={}",
+                fontColor, font.getFamily() + "/" + font.getSize(), lineHeight);
     }
 
     /**

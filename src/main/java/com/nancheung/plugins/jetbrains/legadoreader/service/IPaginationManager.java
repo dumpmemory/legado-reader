@@ -96,11 +96,11 @@ public interface IPaginationManager {
          * 格式化为显示文本
          * 格式："   页码/总页数  内容..."
          *
-         * @param totalPages 总页数
+         * @param totalPages 总
          * @return 格式化后的文本
          */
         public String formatForDisplay(int totalPages) {
-            return String.format("   %d/%d  %s", pageIndex + 1, totalPages, content);
+            return "   %d/%d %s".formatted(pageIndex+1, totalPages, content);
         }
     }
 }

@@ -1,29 +1,25 @@
-package com.nancheung.plugins.jetbrains.legadoreader.gui;
+package com.nancheung.plugins.jetbrains.legadoreader.presentation.settings;
 
 import com.intellij.openapi.options.SearchableConfigurable;
-import com.intellij.ui.JBColor;
 import com.nancheung.plugins.jetbrains.legadoreader.common.Constant;
-import com.nancheung.plugins.jetbrains.legadoreader.gui.ui.SettingUI;
+import com.nancheung.plugins.jetbrains.legadoreader.event.EventPublisher;
+import com.nancheung.plugins.jetbrains.legadoreader.event.SettingsChangedEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.storage.PluginSettingsStorage;
-import com.nancheung.plugins.jetbrains.legadoreader.toolwindow.IndexUI;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
-import javax.swing.text.SimpleAttributeSet;
-import javax.swing.text.StyleConstants;
-import javax.swing.text.StyledDocument;
 import java.awt.*;
 
-public class SettingFactory implements SearchableConfigurable {
+public class SettingsConfigurable implements SearchableConfigurable {
 
     private final static String DISPLAY_NAME = "Legado Reader";
 
     /**
-     * SettingUI 实例（懒加载，避免在类加载时访问服务）
+     * SettingsPanel 实例（懒加载，避免在类加载时访问服务）
      */
-    private static SettingUI settingUI;
+    private static SettingsPanel settingsPanel;
 
     @Override
     public @NotNull String getId() {
@@ -32,12 +28,12 @@ public class SettingFactory implements SearchableConfigurable {
 
     @Override
     public @Nls(capitalization = Nls.Capitalization.Title) String getDisplayName() {
-        return SettingFactory.DISPLAY_NAME;
+        return SettingsConfigurable.DISPLAY_NAME;
     }
 
     @Override
     public @Nullable JComponent createComponent() {
-        SettingUI ui = instance();
+        SettingsPanel ui = instance();
         // 每次打开设置页时，从存储中重新读取设置到 UI（解决取消后再次打开显示未保存值的问题）
         ui.readSettings(PluginSettingsStorage.getInstance().getState());
         return ui.getComponent();
@@ -45,7 +41,7 @@ public class SettingFactory implements SearchableConfigurable {
 
     @Override
     public boolean isModified() {
-        if (settingUI == null) {
+        if (settingsPanel == null) {
             return false;
         }
 
@@ -54,7 +50,7 @@ public class SettingFactory implements SearchableConfigurable {
             return false;
         }
 
-        SettingUI ui = instance();
+        SettingsPanel ui = instance();
 
         // 比较 UI 当前值与存储值是否不同
         boolean fontColorModified = state.textBodyFontColorRgb == null ||
@@ -98,8 +94,8 @@ public class SettingFactory implements SearchableConfigurable {
     @Override
     public void reset() {
         // 重置为上次保存的值
-        if (settingUI != null) {
-            settingUI.readSettings(PluginSettingsStorage.getInstance().getState());
+        if (settingsPanel != null) {
+            settingsPanel.readSettings(PluginSettingsStorage.getInstance().getState());
         }
     }
 
@@ -108,47 +104,35 @@ public class SettingFactory implements SearchableConfigurable {
         // 保存设置
         saveSettings();
 
-        // 更新 UI
+        // 发布设置变更事件，通知 UI 更新
         PluginSettingsStorage storage = PluginSettingsStorage.getInstance();
-        java.awt.Color fontColor = storage.getTextBodyFontColor();
-        Font font = storage.getTextBodyFont(); // 已支持自定义字体
+        Color fontColor = storage.getTextBodyFontColor();
+        Font font = storage.getTextBodyFont();
         double lineHeight = storage.getTextBodyLineHeight();
 
-        JTextPane textBodyPane = IndexUI.getInstance().getTextBodyPane();
-        textBodyPane.setForeground(new JBColor(fontColor, fontColor));
-        textBodyPane.setFont(font);
-
-        // 新增：应用行高
-        applyLineHeightToTextPane(textBodyPane, lineHeight);
-    }
-
-    private void applyLineHeightToTextPane(JTextPane textPane, double lineHeight) {
-        SimpleAttributeSet attrs = new SimpleAttributeSet();
-        float lineSpacing = (float) (lineHeight - 1.0);
-        StyleConstants.setLineSpacing(attrs, lineSpacing);
-
-        StyledDocument doc = textPane.getStyledDocument();
-        doc.setParagraphAttributes(0, doc.getLength(), attrs, false);
+        EventPublisher.getInstance().publish(
+                SettingsChangedEvent.fontSettings(fontColor, font, lineHeight)
+        );
     }
 
     /**
-     * 获取 SettingUI 实例（懒加载）
+     * 获取 SettingsPanel 实例（懒加载）
      * 只在用户打开设置页面时才创建实例，避免在类加载时访问服务
      *
-     * @return SettingUI 实例
+     * @return SettingsPanel 实例
      */
-    public static SettingUI instance() {
-        if (settingUI == null) {
-            settingUI = new SettingUI();
+    public static SettingsPanel instance() {
+        if (settingsPanel == null) {
+            settingsPanel = new SettingsPanel();
 
             // 读取已有配置
-            settingUI.readSettings(PluginSettingsStorage.getInstance().getState());
+            settingsPanel.readSettings(PluginSettingsStorage.getInstance().getState());
         }
-        return settingUI;
+        return settingsPanel;
     }
 
     public void saveSettings() {
-        SettingUI ui = instance();
+        SettingsPanel ui = instance();
         // 直接修改 State 字段，框架会自动持久化
         PluginSettingsStorage.State state = PluginSettingsStorage.getInstance().getState();
         if (state == null) {

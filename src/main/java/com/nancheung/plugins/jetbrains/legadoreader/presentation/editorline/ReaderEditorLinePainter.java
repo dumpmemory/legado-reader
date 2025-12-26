@@ -1,4 +1,4 @@
-package com.nancheung.plugins.jetbrains.legadoreader.editorline;
+package com.nancheung.plugins.jetbrains.legadoreader.presentation.editorline;
 
 import com.intellij.openapi.editor.Editor;
 import com.intellij.openapi.editor.EditorLinePainter;
