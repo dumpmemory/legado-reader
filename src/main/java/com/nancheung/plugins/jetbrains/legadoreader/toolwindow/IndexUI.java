@@ -4,7 +4,11 @@ import com.intellij.openapi.actionSystem.ActionManager;
 import com.intellij.openapi.actionSystem.ActionToolbar;
 import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.ui.ComboBox;
 import com.intellij.ui.JBColor;
+import com.intellij.ui.components.*;
+import com.intellij.ui.table.JBTable;
+import com.intellij.util.ui.JBUI;
 import com.nancheung.plugins.jetbrains.legadoreader.api.ApiUtil;
 import com.nancheung.plugins.jetbrains.legadoreader.api.dto.BookDTO;
 import com.nancheung.plugins.jetbrains.legadoreader.command.Command;
@@ -16,7 +20,6 @@ import com.nancheung.plugins.jetbrains.legadoreader.event.PaginationEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.event.ReaderEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.event.ReaderEventListener;
 import com.nancheung.plugins.jetbrains.legadoreader.event.ReadingEvent;
-import com.nancheung.plugins.jetbrains.legadoreader.gui.SettingFactory;
 import com.nancheung.plugins.jetbrains.legadoreader.manager.ReadingSessionManager;
 import com.nancheung.plugins.jetbrains.legadoreader.model.ReadingSession;
 import com.nancheung.plugins.jetbrains.legadoreader.service.IPaginationManager;
@@ -44,149 +47,356 @@ import java.util.stream.Collectors;
 @Getter
 public class IndexUI {
 
+    // ==================== 卡片常量 ====================
+    private static final String CARD_BOOKSHELF = "BOOKSHELF";
+    private static final String CARD_TEXT_BODY = "TEXT_BODY";
+    private static final String CARD_CONTENT = "CONTENT";
+    private static final String CARD_ERROR = "ERROR";
 
-    /**
-     * UI 状态枚举
-     */
+    // ==================== UI 状态枚举 ====================
     private enum UIState {
-        /**
-         * 初始化状态
-         */
         INITIALIZED,
-
-        /**
-         * 加载中状态
-         */
         LOADING,
-
-        /**
-         * 加载成功状态
-         */
         SUCCESS,
-
-        /**
-         * 加载失败状态
-         */
         FAILED
     }
 
-    /**
-     * 当前 UI 状态
-     */
     private UIState currentState = UIState.INITIALIZED;
 
+    // ==================== 根面板 ====================
+    private JBPanel<?> rootPanel;
+    private CardLayout mainCardLayout;
 
-    /**
-     * 主面板
-     */
-    private JPanel rootPanel;
-
-    /**
-     * 书架面板
-     */
-    private JPanel bookshelfPanel;
-    /**
-     * 书架面板的ip输入框
-     */
-    private JTextField addressTextField;
-    /**
-     * 书架面板的ip输入框的历史记录
-     */
-    private JComboBox<String> addressHistoryBox;
-    /**
-     * 书架面板的刷新按钮
-     */
+    // ==================== 书架面板组件 ====================
+    private JBPanel<?> bookshelfPanel;
+    private JBTextField addressTextField;
+    private ComboBox<String> addressHistoryBox;
     private JButton refreshBookshelfButton;
-    /**
-     * 书架面板的目录的滚动面板
-     */
-    private JScrollPane bookshelfScrollPane;
-    /**
-     * 书架面板的目录表格
-     */
-    private JTable bookshelfTable;
-    /**
-     * 书架面板的错误提示
-     */
-    private JTextPane bookshelfErrorTipsPane;
+    private JBScrollPane bookshelfScrollPane;
+    private JBTable bookshelfTable;
+    private JBLabel bookshelfErrorLabel;
+    private JBPanel<?> bookshelfContentPanel;
+    private CardLayout bookshelfContentLayout;
 
-    /**
-     * 正文面板
-     */
-    private JPanel textBodyPanel;
-    /**
-     * 正文面板的操作按钮bar
-     */
-    private JToolBar bar;
-    /**
-     * 正文面板的滚动面板
-     */
-    private JScrollPane textBodyScrollPane;
-    /**
-     * 正文面板的滚动面板中的正文
-     */
+    // ==================== 正文面板组件 ====================
+    private JBPanel<?> textBodyPanel;
+    private ActionToolbar actionToolbar;
+    private JBScrollPane textBodyScrollPane;
     private JTextPane textBodyPane;
-    /**
-     * 正文面板的错误提示
-     */
-    private JTextPane textBodyErrorTipsPane;
+    private JBLabel textBodyErrorLabel;
+    private JBPanel<?> textBodyContentPanel;
+    private CardLayout textBodyContentLayout;
 
-    private static final DefaultTableModel BOOK_SHELF_TABLE_MODEL = new DefaultTableModel(null, new String[]{"name", "current", "new", "author"}) {
+    // ==================== 数据模型 ====================
+    private static final DefaultTableModel BOOK_SHELF_TABLE_MODEL = new DefaultTableModel(
+            null,
+            new String[]{"name", "current", "new", "author"}
+    ) {
         @Override
         public boolean isCellEditable(int row, int column) {
-            // 表格不允许被编辑
             return false;
         }
     };
 
     public static final DefaultComboBoxModel<String> ADDRESS_HISTORY_BOX_MODEL = new DefaultComboBoxModel<>();
 
-    /**
-     * 单例实例，延迟初始化避免类加载时访问 Service
-     */
+    // ==================== 单例实例 ====================
     private static IndexUI INSTANCE;
 
-    /**
-     * 书架目录（临时存储在内存）
-     * key: author + "#" + name
-     * value: 书籍信息
-     */
+    // ==================== 书架数据 ====================
     private Map<String, BookDTO> bookshelf;
-
     private static final BiFunction<String, String, String> BOOK_MAP_KEY_FUNC = (author, name) -> author + "#" + name;
 
+    // ==================== 错误提示文本 ====================
+    private static final String ERROR_MESSAGE = """
+            请求内容失败，请检查web服务是否开启、url是否正确、网络是否正常？
+            
+            小提示：可以在File -> Settings -> Tools -> Legado Reader中进行更多设置哦~
+            """;
 
+    // ==================== 构造函数 ====================
     public IndexUI() {
-        // 初始化界面设置
-        initIndexUI();
+        // 1. 创建 UI 组件
+        createRootPanel();
 
-        // 订阅阅读事件（使用新的事件系统）
+        // 2. 初始化组件状态
+        initComponentStates();
+
+        // 3. 绑定事件监听器
+        bindEventListeners();
+
+        // 4. 订阅阅读事件
+        subscribeToReaderEvents();
+
+        // 5. 初始加载书架
+        initialLoadBookshelf();
+    }
+
+    // ==================== 组件创建方法 ====================
+
+    /**
+     * 创建根面板
+     */
+    private void createRootPanel() {
+        mainCardLayout = new CardLayout();
+        rootPanel = new JBPanel<>(mainCardLayout);
+
+        // 创建书架面板
+        bookshelfPanel = createBookshelfPanel();
+        rootPanel.add(bookshelfPanel, CARD_BOOKSHELF);
+
+        // 创建正文面板
+        textBodyPanel = createTextBodyPanel();
+        rootPanel.add(textBodyPanel, CARD_TEXT_BODY);
+
+        // 默认显示书架
+        mainCardLayout.show(rootPanel, CARD_BOOKSHELF);
+    }
+
+    /**
+     * 创建书架面板
+     */
+    private JBPanel<?> createBookshelfPanel() {
+        JBPanel<?> panel = new JBPanel<>(new BorderLayout());
+
+        // 1. 顶部地址栏
+        JBPanel<?> addressBar = createAddressBar();
+        panel.add(addressBar, BorderLayout.NORTH);
+
+        // 2. 中央内容区（使用 CardLayout 切换内容/错误）
+        bookshelfContentLayout = new CardLayout();
+        bookshelfContentPanel = new JBPanel<>(bookshelfContentLayout);
+
+        // 2.1 内容卡片：书架表格
+        bookshelfScrollPane = new JBScrollPane(createBookshelfTable());
+        bookshelfContentPanel.add(bookshelfScrollPane, CARD_CONTENT);
+
+        // 2.2 错误卡片：错误提示
+        bookshelfErrorLabel = createErrorLabel();
+        bookshelfContentPanel.add(wrapCentered(bookshelfErrorLabel), CARD_ERROR);
+
+        panel.add(bookshelfContentPanel, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    /**
+     * 创建地址栏
+     */
+    private JBPanel<?> createAddressBar() {
+        JBPanel<?> addressBar = new JBPanel<>();
+        addressBar.setLayout(new BoxLayout(addressBar, BoxLayout.X_AXIS));
+        addressBar.setBorder(JBUI.Borders.empty(4));
+
+        // 地址输入框
+        addressTextField = new JBTextField("127.0.0.1:1122");
+        addressTextField.setMinimumSize(JBUI.size(150, -1));
+        addressTextField.setPreferredSize(JBUI.size(150, -1));
+
+        // 历史记录下拉框
+        addressHistoryBox = new ComboBox<>(ADDRESS_HISTORY_BOX_MODEL);
+
+        // 刷新按钮
+        refreshBookshelfButton = new JButton("刷新");
+
+        addressBar.add(addressTextField);
+        addressBar.add(Box.createHorizontalStrut(JBUI.scale(4)));
+        addressBar.add(addressHistoryBox);
+        addressBar.add(Box.createHorizontalStrut(JBUI.scale(4)));
+        addressBar.add(refreshBookshelfButton);
+
+        return addressBar;
+    }
+
+    /**
+     * 创建书架表格
+     */
+    private JBTable createBookshelfTable() {
+        bookshelfTable = new JBTable(BOOK_SHELF_TABLE_MODEL);
+        bookshelfTable.setFillsViewportHeight(true);
+        bookshelfTable.setRowSelectionAllowed(true);
+        bookshelfTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        return bookshelfTable;
+    }
+
+    /**
+     * 创建正文面板
+     */
+    private JBPanel<?> createTextBodyPanel() {
+        JBPanel<?> panel = new JBPanel<>(new BorderLayout());
+
+        // 1. 顶部工具栏
+        ActionManager actionManager = ActionManager.getInstance();
+        DefaultActionGroup actionGroup = (DefaultActionGroup) actionManager.getAction(Constant.PLUGIN_TOOL_BAR_ID);
+        actionToolbar = actionManager.createActionToolbar(Constant.PLUGIN_TOOL_BAR_ID, actionGroup, true);
+        actionToolbar.setTargetComponent(panel);
+
+        JComponent toolbarComponent = actionToolbar.getComponent();
+        toolbarComponent.setBorder(JBUI.Borders.empty());
+        panel.add(toolbarComponent, BorderLayout.NORTH);
+
+        // 2. 中央内容区
+        textBodyContentLayout = new CardLayout();
+        textBodyContentPanel = new JBPanel<>(textBodyContentLayout);
+
+        // 2.1 内容卡片：正文
+        textBodyPane = new JTextPane();
+        textBodyPane.setEditable(false);
+        textBodyScrollPane = new JBScrollPane(textBodyPane);
+        textBodyContentPanel.add(textBodyScrollPane, CARD_CONTENT);
+
+        // 2.2 错误卡片
+        textBodyErrorLabel = createErrorLabel();
+        textBodyContentPanel.add(wrapCentered(textBodyErrorLabel), CARD_ERROR);
+
+        panel.add(textBodyContentPanel, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    /**
+     * 创建错误标签
+     */
+    private JBLabel createErrorLabel() {
+        JBLabel label = new JBLabel();
+        label.setText("<html><center>" + ERROR_MESSAGE.replace("\n", "<br>") + "</center></html>");
+        label.setHorizontalAlignment(SwingConstants.CENTER);
+        label.setForeground(JBColor.GRAY);
+        return label;
+    }
+
+    /**
+     * 将组件包装在居中面板中
+     */
+    private JBPanel<?> wrapCentered(JComponent component) {
+        JBPanel<?> wrapper = new JBPanel<>(new GridBagLayout());
+        wrapper.add(component);
+        return wrapper;
+    }
+
+    // ==================== 初始化方法 ====================
+
+    /**
+     * 初始化组件状态
+     */
+    private void initComponentStates() {
+        // 设置数据模型
+        addressHistoryBox.setModel(ADDRESS_HISTORY_BOX_MODEL);
+        bookshelfTable.setModel(BOOK_SHELF_TABLE_MODEL);
+
+        // 默认显示内容（不显示错误）
+        showBookshelfContent();
+        showTextBodyContent();
+    }
+
+    /**
+     * 绑定事件监听器
+     */
+    private void bindEventListeners() {
+        // 刷新按钮
+        refreshBookshelfButton.addActionListener(e -> {
+            refreshBookshelfButton.setEnabled(false);
+            AddressHistoryStorage.getInstance().addAddress(addressTextField.getText());
+            setAddressUI();
+            refreshBookshelf(
+                    books -> refreshBookshelfButton.setEnabled(true),
+                    error -> refreshBookshelfButton.setEnabled(true)
+            );
+        });
+
+        // 表格点击
+        bookshelfTable.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent evt) {
+                handleBookSelection(evt);
+            }
+        });
+
+        // 历史记录选择
+        addressHistoryBox.addItemListener(e -> {
+            if (e.getStateChange() == ItemEvent.SELECTED && e.getItem() != null) {
+                addressTextField.setText(e.getItem().toString());
+            }
+        });
+    }
+
+    /**
+     * 订阅阅读事件
+     */
+    private void subscribeToReaderEvents() {
         ApplicationManager.getApplication()
                 .getMessageBus()
                 .connect()
                 .subscribe(ReaderEventListener.TOPIC, (ReaderEventListener) event -> {
-                    // 使用 pattern matching 处理不同事件
                     switch (event) {
                         case ReadingEvent e -> INSTANCE.onReadingEvent(e);
                         case PaginationEvent e -> INSTANCE.onPaginationEvent(e);
-                        default -> {}
+                        default -> {
+                        }
                     }
                 });
-
-        // 初始化使用默认ip刷新书架目录
-        refreshBookshelf(bookDTOS -> refreshBookshelfButton.setEnabled(true), throwable -> refreshBookshelfButton.setEnabled(true));
-
-        // 刷新书架目录按钮事件
-        refreshBookshelfButton.addActionListener(refreshBookshelfActionListener());
-        // 表格数据点击事件
-        bookshelfTable.addMouseListener(toTextBodyMouseAdapter());
-
-        // ip输入框的历史记录点击事件
-        addressHistoryBox.addItemListener(selectAddressHistoryItemListener());
     }
 
+    /**
+     * 初始加载书架
+     */
+    private void initialLoadBookshelf() {
+        refreshBookshelf(
+                books -> refreshBookshelfButton.setEnabled(true),
+                error -> refreshBookshelfButton.setEnabled(true)
+        );
+    }
+
+    // ==================== 面板切换方法 ====================
+
+    /**
+     * 显示书架面板
+     */
+    public void showBookshelfPanel() {
+        mainCardLayout.show(rootPanel, CARD_BOOKSHELF);
+    }
+
+    /**
+     * 显示正文面板
+     */
+    public void showTextBodyPanel() {
+        mainCardLayout.show(rootPanel, CARD_TEXT_BODY);
+    }
+
+    /**
+     * 显示书架内容（隐藏错误）
+     */
+    public void showBookshelfContent() {
+        bookshelfContentLayout.show(bookshelfContentPanel, CARD_CONTENT);
+    }
+
+    /**
+     * 显示书架错误（隐藏内容）
+     */
+    public void showBookshelfError() {
+        bookshelfContentLayout.show(bookshelfContentPanel, CARD_ERROR);
+    }
+
+    /**
+     * 显示正文内容（隐藏错误）
+     */
+    public void showTextBodyContent() {
+        textBodyContentLayout.show(textBodyContentPanel, CARD_CONTENT);
+    }
+
+    /**
+     * 显示正文错误（隐藏内容）
+     */
+    public void showTextBodyError() {
+        textBodyContentLayout.show(textBodyContentPanel, CARD_ERROR);
+    }
+
+    // ==================== 业务逻辑方法 ====================
+
+    /**
+     * 刷新书架
+     */
     public void refreshBookshelf(Consumer<List<BookDTO>> acceptConsumer, Consumer<Throwable> throwableConsumer) {
-        // 调用API获取书架目录
         CompletableFuture.supplyAsync(ApiUtil::getBookshelf)
                 .thenAccept(books -> {
                     // 保存书架目录信息
@@ -200,7 +410,7 @@ public class IndexUI {
 
                     acceptConsumer.accept(books);
                 }).exceptionally(throwable -> {
-                    showErrorTips(bookshelfScrollPane, bookshelfErrorTipsPane);
+                    showBookshelfError();
 
                     if (Boolean.TRUE.equals(PluginSettingsStorage.getInstance().getState().enableErrorLog)) {
                         log.error("获取书架列表失败", throwable.getCause());
@@ -211,92 +421,12 @@ public class IndexUI {
                 });
     }
 
-    private void initIndexUI() {
-        // 隐藏正文面板
-        textBodyPanel.setVisible(false);
-        // 隐藏正文面板的错误提示
-        textBodyErrorTipsPane.setVisible(false);
-
-        // 隐藏书架面板的错误提示
-        bookshelfErrorTipsPane.setVisible(false);
-        // 设置书架面板的错误提示为不可编辑
-        bookshelfErrorTipsPane.setEditable(false);
-
-        // 设置书架面板的表格数据格式
-        addressHistoryBox.setModel(ADDRESS_HISTORY_BOX_MODEL);
-
-        // 设置书架面板的表格数据格式
-        bookshelfTable.setModel(IndexUI.BOOK_SHELF_TABLE_MODEL);
-
-        // 设置正文面板的错误提示为不可编辑
-        textBodyErrorTipsPane.setEditable(false);
-
-        // 创建action bar
-        final ActionManager actionManager = ActionManager.getInstance();
-        ActionToolbar actionToolbar = actionManager.createActionToolbar(Constant.PLUGIN_TOOL_BAR_ID, (DefaultActionGroup) actionManager.getAction(Constant.PLUGIN_TOOL_BAR_ID), true);
-
-        // 显式设置 TargetComponent 为 textBodyPanel，确保即使显示错误提示时 actions 也能执行
-        actionToolbar.setTargetComponent(textBodyPanel);
-
-        // 将bar添加至ui
-        bar.add(actionToolbar.getComponent());
-        // 设置bar样式：无边框、不可拖动
-        bar.setBorderPainted(false);
-        bar.setFloatable(false);
-    }
-
-    private ActionListener refreshBookshelfActionListener() {
-        return e -> {
-            // 设置按钮不可点击，防止多次点击
-            refreshBookshelfButton.setEnabled(false);
-
-            AddressHistoryStorage.getInstance().addAddress(addressTextField.getText());
-
-            setAddressUI();
-
-            refreshBookshelf(bookDTOS -> refreshBookshelfButton.setEnabled(true), throwable -> refreshBookshelfButton.setEnabled(true));
-        };
-    }
-
-    private ItemListener selectAddressHistoryItemListener() {
-        return e -> {
-            if (e.getStateChange() == ItemEvent.SELECTED) {
-                addressTextField.setText(e.getItem().toString());
-            }
-        };
-    }
-
-    private MouseAdapter toTextBodyMouseAdapter() {
-        return new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent evt) {
-                int row = bookshelfTable.rowAtPoint(evt.getPoint());
-                int col = bookshelfTable.columnAtPoint(evt.getPoint());
-
-                if (row < 0 || col < 0) {
-                    return;
-                }
-
-                // 获取当前点击的书籍信息
-                TableModel model = ((JTable) evt.getSource()).getModel();
-                String name = model.getValueAt(row, 0).toString();
-                String author = model.getValueAt(row, 3).toString();
-
-                // 获取书籍信息
-                BookDTO book = getBook(author, name);
-
-                // 加载章节（事件驱动）
-                CommandBus.getInstance().dispatchAsync(Command.of(
-                        CommandType.SELECT_BOOK,
-                        new SelectBookPayload(book, book.getDurChapterIndex())
-                ));
-            }
-        };
-    }
-
+    /**
+     * 设置书架 UI
+     */
     private void setBookshelfUI(List<BookDTO> books) {
         // 清空表格
-        IndexUI.BOOK_SHELF_TABLE_MODEL.getDataVector().clear();
+        BOOK_SHELF_TABLE_MODEL.getDataVector().clear();
 
         // 添加表格数据
         books.stream().map(book -> {
@@ -306,19 +436,41 @@ public class IndexUI {
             bookVector.add(book.getLatestChapterTitle());
             bookVector.add(book.getAuthor());
             return bookVector;
-        }).forEach(IndexUI.BOOK_SHELF_TABLE_MODEL::addRow);
+        }).forEach(BOOK_SHELF_TABLE_MODEL::addRow);
 
-        if (!bookshelfScrollPane.isShowing()) {
-            bookshelfScrollPane.setVisible(true);
-            bookshelfErrorTipsPane.setVisible(false);
+        // 显示内容（隐藏错误）
+        showBookshelfContent();
+    }
+
+    /**
+     * 处理书籍选择
+     */
+    private void handleBookSelection(MouseEvent evt) {
+        int row = bookshelfTable.rowAtPoint(evt.getPoint());
+        int col = bookshelfTable.columnAtPoint(evt.getPoint());
+
+        if (row < 0 || col < 0) {
+            return;
         }
+
+        // 获取当前点击的书籍信息
+        TableModel model = ((JTable) evt.getSource()).getModel();
+        String name = model.getValueAt(row, 0).toString();
+        String author = model.getValueAt(row, 3).toString();
+
+        // 获取书籍信息
+        BookDTO book = getBook(author, name);
+
+        // 加载章节（事件驱动）
+        CommandBus.getInstance().dispatchAsync(Command.of(
+                CommandType.SELECT_BOOK,
+                new SelectBookPayload(book, book.getDurChapterIndex())
+        ));
     }
 
-    private void showErrorTips(JScrollPane textBodyScrollPane, JTextPane textBodyErrorTipsPane) {
-        textBodyScrollPane.setVisible(false);
-        textBodyErrorTipsPane.setVisible(true);
-    }
-
+    /**
+     * 设置地址 UI
+     */
     private void setAddressUI() {
         List<String> addressHistoryList = AddressHistoryStorage.getInstance().getAddressList();
         // 设置书架面板的ip输入框的历史记录
@@ -335,15 +487,29 @@ public class IndexUI {
         addressHistoryBox.setEnabled(true);
         ADDRESS_HISTORY_BOX_MODEL.setSelectedItem(addressHistoryList.getFirst());
         addressTextField.setText(addressHistoryList.getFirst());
-
     }
 
+    /**
+     * 获取书籍
+     */
+    private BookDTO getBook(String author, String name) {
+        if (bookshelf == null) {
+            return null;
+        }
+        return bookshelf.get(BOOK_MAP_KEY_FUNC.apply(author, name));
+    }
+
+    // ==================== 公共接口方法 ====================
+
+    /**
+     * 获取根组件
+     */
     public JComponent getComponent() {
         return rootPanel;
     }
 
     /**
-     * 获取单例实例（懒加载）
+     * 获取单例实例
      */
     public static IndexUI getInstance() {
         if (INSTANCE == null) {
@@ -353,37 +519,19 @@ public class IndexUI {
     }
 
     /**
-     * 获取书籍
-     *
-     * @param author 作者
-     * @param name   书名
-     * @return 书籍信息
-     */
-    private BookDTO getBook(String author, String name) {
-        if (bookshelf == null) {
-            return null;
-        }
-        return bookshelf.get(BOOK_MAP_KEY_FUNC.apply(author, name));
-    }
-
-    /**
      * 初始化地址历史记录
-     * 在 ToolWindow 首次显示时调用，延迟访问 Service
+     * 在 ToolWindow 首次显示时调用
      */
     public void initAddressHistory() {
         setAddressUI();
     }
 
-    // ==================== 事件驱动的阅读功能 ====================
+    // ==================== 事件处理方法 ====================
 
     /**
      * 阅读事件分发器
-     * 根据事件状态调用不同的处理方法
-     *
-     * @param event 阅读事件
      */
     public void onReadingEvent(ReadingEvent event) {
-        // 确保在 EDT 线程中执行 UI 更新
         ApplicationManager.getApplication().invokeLater(() -> {
             switch (event.type()) {
                 case CHAPTER_LOADING -> handleLoadingStarted(event);
@@ -396,16 +544,13 @@ public class IndexUI {
 
     /**
      * 处理"会话结束"事件
-     * 返回书架，清空正文显示
      */
     private void handleSessionEnded() {
         currentState = UIState.INITIALIZED;
-
         log.info("会话结束，返回书架");
 
         // 显示书架面板
-        bookshelfPanel.setVisible(true);
-        textBodyPanel.setVisible(false);
+        showBookshelfPanel();
 
         // 清空正文内容
         textBodyPane.setText("");
@@ -413,12 +558,8 @@ public class IndexUI {
 
     /**
      * 处理分页事件
-     * 当翻页时，同步更新正文面板的光标位置
-     *
-     * @param event 分页事件
      */
     private void onPaginationEvent(PaginationEvent event) {
-        // 确保在 EDT 线程中执行 UI 更新
         ApplicationManager.getApplication().invokeLater(() -> {
             // 只处理页码变更事件（PAGE_CHANGED）
             if (event.type() != PaginationEvent.PaginationEventType.PAGE_CHANGED) {
@@ -426,7 +567,7 @@ public class IndexUI {
             }
 
             // 如果正文面板不可见，跳过（用户可能在书架）
-            if (!textBodyPanel.isVisible() || !textBodyScrollPane.isVisible()) {
+            if (!textBodyPanel.isVisible()) {
                 log.debug("正文面板不可见，跳过光标同步");
                 return;
             }
@@ -476,9 +617,6 @@ public class IndexUI {
 
     /**
      * 处理"开始加载"事件
-     * UI 进入加载中状态，显示加载提示
-     *
-     * @param event 阅读事件
      */
     private void handleLoadingStarted(ReadingEvent event) {
         currentState = UIState.LOADING;
@@ -486,17 +624,9 @@ public class IndexUI {
         log.info("UI 进入加载状态: book={}, chapterIndex={}",
                 event.book().getName(), event.chapter().getIndex());
 
-        // 显示正文面板
-        if (!textBodyPanel.isShowing()) {
-            textBodyPanel.setVisible(true);
-            bookshelfPanel.setVisible(false);
-        }
-
-        // 隐藏错误提示
-        if (!textBodyScrollPane.isShowing()) {
-            textBodyScrollPane.setVisible(true);
-            textBodyErrorTipsPane.setVisible(false);
-        }
+        // 切换到正文面板并显示内容区
+        showTextBodyPanel();
+        showTextBodyContent();
 
         // 设置加载提示
         textBodyPane.setText("加载中...");
@@ -507,9 +637,6 @@ public class IndexUI {
 
     /**
      * 处理"加载成功"事件
-     * UI 进入成功状态，显示章节内容
-     *
-     * @param event 阅读事件
      */
     private void handleLoadingSuccess(ReadingEvent event) {
         currentState = UIState.SUCCESS;
@@ -520,7 +647,7 @@ public class IndexUI {
         // 设置正文字体样式
         PluginSettingsStorage storage = PluginSettingsStorage.getInstance();
         Color fontColor = storage.getTextBodyFontColor();
-        Font font = storage.getTextBodyFont(); // 已支持自定义字体
+        Font font = storage.getTextBodyFont();
         double lineHeight = storage.getTextBodyLineHeight();
 
         textBodyPane.setForeground(new JBColor(fontColor, fontColor));
@@ -540,9 +667,6 @@ public class IndexUI {
 
     /**
      * 应用行高到 JTextPane
-     *
-     * @param textPane   文本面板
-     * @param lineHeight 行高倍数
      */
     private void applyLineHeight(JTextPane textPane, double lineHeight) {
         javax.swing.text.SimpleAttributeSet attrs = new javax.swing.text.SimpleAttributeSet();
@@ -555,9 +679,6 @@ public class IndexUI {
 
     /**
      * 处理"加载失败"事件
-     * UI 进入失败状态，显示错误提示
-     *
-     * @param event 阅读事件
      */
     private void handleLoadingFailed(ReadingEvent event) {
         currentState = UIState.FAILED;
@@ -568,7 +689,7 @@ public class IndexUI {
                 event.error() != null ? event.error().getMessage() : "Unknown");
 
         // 显示错误提示
-        showErrorTips(textBodyScrollPane, textBodyErrorTipsPane);
+        showTextBodyError();
 
         // 记录详细错误日志
         if (Boolean.TRUE.equals(PluginSettingsStorage.getInstance().getState().enableErrorLog)) {
