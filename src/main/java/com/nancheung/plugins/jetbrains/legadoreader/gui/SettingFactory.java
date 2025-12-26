@@ -58,10 +58,10 @@ public class SettingFactory implements SearchableConfigurable {
 
         // 比较 UI 当前值与存储值是否不同
         boolean fontColorModified = state.textBodyFontColorRgb == null ||
-                state.textBodyFontColorRgb != ui.getTextBodyFontColorLabel().getForeground().getRGB();
+                state.textBodyFontColorRgb != ui.getFontColorLabel().getBackground().getRGB();
 
         boolean fontSizeModified = state.textBodyFontSize == null ||
-                !state.textBodyFontSize.equals(ui.getTextBodyFontSizeSpinner().getValue());
+                !state.textBodyFontSize.equals(ui.getFontSizeSpinner().getValue());
 
         String currentCustomParam = ui.getApiCustomParamTextArea().getText();
         String storedCustomParam = state.apiCustomParam == null ? "" : state.apiCustomParam;
@@ -72,7 +72,7 @@ public class SettingFactory implements SearchableConfigurable {
         boolean inLineModelModified = Boolean.TRUE.equals(state.enableShowBodyInLine) != ui.getEnableInLineModelCheckBox().isSelected();
 
         // 新增：字体名称比较
-        String currentFontFamily = (String) ui.getTextBodyFontFamilyComboBox().getSelectedItem();
+        String currentFontFamily = (String) ui.getFontFamilyComboBox().getSelectedItem();
         String storedFontFamily = state.textBodyFontFamily;
         if (storedFontFamily == null || storedFontFamily.isEmpty()) {
             try {
@@ -87,7 +87,7 @@ public class SettingFactory implements SearchableConfigurable {
         boolean fontFamilyModified = !currentFontFamily.equals(storedFontFamily);
 
         // 新增：行高比较（注意精度问题）
-        double currentLineHeight = (double) ui.getTextBodyLineHeightSpinner().getValue();
+        double currentLineHeight = (double) ui.getLineHeightSpinner().getValue();
         double storedLineHeight = state.textBodyLineHeight != null ? state.textBodyLineHeight : 1.5;
         boolean lineHeightModified = Math.abs(currentLineHeight - storedLineHeight) > 0.001;
 
@@ -155,14 +155,14 @@ public class SettingFactory implements SearchableConfigurable {
             return;
         }
 
-        state.textBodyFontColorRgb = ui.getTextBodyFontColorLabel().getForeground().getRGB();
-        state.textBodyFontSize = (int) ui.getTextBodyFontSizeSpinner().getValue();
+        state.textBodyFontColorRgb = ui.getFontColorLabel().getBackground().getRGB();
+        state.textBodyFontSize = (int) ui.getFontSizeSpinner().getValue();
         state.apiCustomParam = ui.getApiCustomParamTextArea().getText();
         state.enableErrorLog = ui.getEnableErrorLogCheckBox().isSelected();
         state.enableShowBodyInLine = ui.getEnableInLineModelCheckBox().isSelected();
 
         // 新增：保存字体名称和行高
-        state.textBodyFontFamily = (String) ui.getTextBodyFontFamilyComboBox().getSelectedItem();
-        state.textBodyLineHeight = (double) ui.getTextBodyLineHeightSpinner().getValue();
+        state.textBodyFontFamily = (String) ui.getFontFamilyComboBox().getSelectedItem();
+        state.textBodyLineHeight = (double) ui.getLineHeightSpinner().getValue();
     }
 }
