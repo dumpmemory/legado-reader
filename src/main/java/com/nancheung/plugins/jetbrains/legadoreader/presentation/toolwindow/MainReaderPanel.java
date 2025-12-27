@@ -89,10 +89,7 @@ public class MainReaderPanel extends UIEventSubscriber {
      * 初始加载书架
      */
     private void initialLoadBookshelf() {
-        bookshelfPanel.refreshBookshelf(
-                books -> {},
-                error -> {}
-        );
+        bookshelfPanel.refreshBookshelf();
     }
 
     // ==================== 面板切换方法 ====================

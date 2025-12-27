@@ -16,9 +16,7 @@ public class BackBookshelfAction extends AnAction {
         MainReaderPanel mainPanel = MainReaderPanel.getInstance();
 
         // 刷新书架
-        mainPanel.getBookshelfPanel().refreshBookshelf(bookDTOS -> {
-        }, throwable -> {
-        });
+        mainPanel.getBookshelfPanel().refreshBookshelf();
 
         // 显示书架面板
         mainPanel.showBookshelfPanel();

@@ -1,34 +1,28 @@
 package com.nancheung.plugins.jetbrains.legadoreader.presentation.toolwindow.panel;
 
-import com.intellij.openapi.ui.ComboBox;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBPanel;
 import com.intellij.ui.components.JBScrollPane;
-import com.intellij.ui.components.JBTextField;
 import com.intellij.ui.table.JBTable;
-import com.intellij.util.ui.JBUI;
 import com.nancheung.plugins.jetbrains.legadoreader.api.ApiUtil;
 import com.nancheung.plugins.jetbrains.legadoreader.api.dto.BookDTO;
 import com.nancheung.plugins.jetbrains.legadoreader.command.Command;
 import com.nancheung.plugins.jetbrains.legadoreader.command.CommandBus;
 import com.nancheung.plugins.jetbrains.legadoreader.command.CommandType;
 import com.nancheung.plugins.jetbrains.legadoreader.command.payload.SelectBookPayload;
-import com.nancheung.plugins.jetbrains.legadoreader.storage.AddressHistoryStorage;
-import com.nancheung.plugins.jetbrains.legadoreader.storage.PluginSettingsStorage;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableModel;
 import java.awt.*;
-import java.awt.event.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.List;
 import java.util.Map;
 import java.util.Vector;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -54,12 +48,10 @@ public class BookshelfPanel extends JBPanel<BookshelfPanel> {
             """;
 
     // ==================== UI 组件 ====================
-    private JBTextField addressTextField;
-    private ComboBox<String> addressHistoryBox;
-    private JButton refreshBookshelfButton;
-    private JBTable bookshelfTable;
-    private JBPanel<?> bookshelfContentPanel;
-    private CardLayout bookshelfContentLayout;
+    private final AddressBarPanel<List<BookDTO>> addressBarPanel;
+    private final JBTable bookshelfTable;
+    private final JBPanel<?> bookshelfContentPanel;
+    private final CardLayout bookshelfContentLayout;
 
     // ==================== 数据模型（静态，多窗口共享） ====================
     private static final DefaultTableModel BOOK_SHELF_TABLE_MODEL =
@@ -70,8 +62,6 @@ public class BookshelfPanel extends JBPanel<BookshelfPanel> {
                 }
             };
 
-    public static final DefaultComboBoxModel<String> ADDRESS_HISTORY_BOX_MODEL = new DefaultComboBoxModel<>();
-
     // ==================== 书架数据 ====================
     private Map<String, BookDTO> bookshelf;
     private static final BiFunction<String, String, String> BOOK_MAP_KEY_FUNC = (author, name) -> author + "#" + name;
@@ -80,9 +70,9 @@ public class BookshelfPanel extends JBPanel<BookshelfPanel> {
     public BookshelfPanel() {
         super(new BorderLayout());
 
-        // 1. 创建地址栏组件
-        JBPanel<?> addressBar = createAddressBar();
-        this.add(addressBar, BorderLayout.NORTH);
+        // 1. 创建地址栏组件，传入加载动作和回调
+        addressBarPanel = new AddressBarPanel<>(ApiUtil::getBookshelf, this::handleBooksLoaded, this::handleLoadFailed);
+        this.add(addressBarPanel, BorderLayout.NORTH);
 
         // 2. 中央内容区（使用 CardLayout 切换内容/错误）
         bookshelfContentLayout = new CardLayout();
@@ -105,37 +95,6 @@ public class BookshelfPanel extends JBPanel<BookshelfPanel> {
     }
 
     // ==================== UI 创建方法 ====================
-
-    /**
-     * 创建地址栏
-     */
-    private JBPanel<?> createAddressBar() {
-        JBPanel<?> addressBar = new JBPanel<>();
-        addressBar.setLayout(new BoxLayout(addressBar, BoxLayout.X_AXIS));
-        addressBar.setBorder(JBUI.Borders.empty(4));
-
-        // 地址输入框
-        addressTextField = new JBTextField("127.0.0.1:1122");
-        addressTextField.setMinimumSize(JBUI.size(150, -1));
-        addressTextField.setPreferredSize(JBUI.size(150, -1));
-        addressTextField.setName("addressTextField");
-
-        // 历史记录下拉框
-        addressHistoryBox = new ComboBox<>(ADDRESS_HISTORY_BOX_MODEL);
-        addressHistoryBox.setName("addressHistoryBox");
-
-        // 刷新按钮
-        refreshBookshelfButton = new JButton("刷新");
-        refreshBookshelfButton.setName("refreshButton");
-
-        addressBar.add(addressTextField);
-        addressBar.add(Box.createHorizontalStrut(JBUI.scale(4)));
-        addressBar.add(addressHistoryBox);
-        addressBar.add(Box.createHorizontalStrut(JBUI.scale(4)));
-        addressBar.add(refreshBookshelfButton);
-
-        return addressBar;
-    }
 
     /**
      * 创建书架表格
@@ -174,29 +133,11 @@ public class BookshelfPanel extends JBPanel<BookshelfPanel> {
      * 绑定事件监听器
      */
     private void bindEventListeners() {
-        // 刷新按钮
-        refreshBookshelfButton.addActionListener(e -> {
-            refreshBookshelfButton.setEnabled(false);
-            AddressHistoryStorage.getInstance().addAddress(addressTextField.getText());
-            setAddressUI();
-            refreshBookshelf(
-                    books -> refreshBookshelfButton.setEnabled(true),
-                    error -> refreshBookshelfButton.setEnabled(true)
-            );
-        });
-
         // 表格点击
         bookshelfTable.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent evt) {
                 handleBookSelection(evt);
-            }
-        });
-
-        // 历史记录选择
-        addressHistoryBox.addItemListener(e -> {
-            if (e.getStateChange() == ItemEvent.SELECTED && e.getItem() != null) {
-                addressTextField.setText(e.getItem().toString());
             }
         });
     }
@@ -217,38 +158,34 @@ public class BookshelfPanel extends JBPanel<BookshelfPanel> {
         bookshelfContentLayout.show(bookshelfContentPanel, CARD_ERROR);
     }
 
-    // ==================== 业务逻辑方法 ====================
+    // ==================== 回调处理方法 ====================
 
     /**
-     * 刷新书架
+     * 处理书籍加载成功
+     * 由 AddressBarPanel 回调触发
      *
-     * @param acceptConsumer    成功回调
-     * @param throwableConsumer 失败回调
+     * @param books 书籍列表
      */
-    public void refreshBookshelf(Consumer<List<BookDTO>> acceptConsumer, Consumer<Throwable> throwableConsumer) {
-        CompletableFuture.supplyAsync(ApiUtil::getBookshelf)
-                .thenAccept(books -> {
-                    // 保存书架目录信息
-                    this.bookshelf = books.stream()
-                            .collect(Collectors.toMap(
-                                    book -> BOOK_MAP_KEY_FUNC.apply(book.getAuthor(), book.getName()),
-                                    Function.identity()
-                            ));
-                    // 设置书架目录UI
-                    setBookshelfUI(books);
-
-                    acceptConsumer.accept(books);
-                }).exceptionally(throwable -> {
-                    showError();
-
-                    if (Boolean.TRUE.equals(PluginSettingsStorage.getInstance().getState().enableErrorLog)) {
-                        log.error("获取书架列表失败", throwable.getCause());
-                    }
-
-                    throwableConsumer.accept(throwable);
-                    return null;
-                });
+    private void handleBooksLoaded(List<BookDTO> books) {
+        // 保存书架目录信息
+        this.bookshelf = books.stream()
+                .collect(Collectors.toMap(
+                        book -> BOOK_MAP_KEY_FUNC.apply(book.getAuthor(), book.getName()),
+                        Function.identity()
+                ));
+        // 设置书架目录 UI
+        setBookshelfUI(books);
     }
+
+    /**
+     * 处理加载失败
+     * 由 AddressBarPanel 回调触发
+     */
+    private void handleLoadFailed() {
+        showError();
+    }
+
+    // ==================== 业务逻辑方法 ====================
 
     /**
      * 设置书架 UI
@@ -300,27 +237,6 @@ public class BookshelfPanel extends JBPanel<BookshelfPanel> {
     }
 
     /**
-     * 设置地址 UI
-     */
-    private void setAddressUI() {
-        List<String> addressHistoryList = AddressHistoryStorage.getInstance().getAddressList();
-        // 设置书架面板的 ip输入框的历史记录
-        ADDRESS_HISTORY_BOX_MODEL.removeAllElements();
-        ADDRESS_HISTORY_BOX_MODEL.addAll(addressHistoryList);
-
-        if (addressHistoryList.isEmpty()) {
-            addressHistoryBox.setEnabled(false);
-            ADDRESS_HISTORY_BOX_MODEL.addElement("127:0.0.1:1122");
-            return;
-        }
-
-        // 设置书架面板的 ip输入框
-        addressHistoryBox.setEnabled(true);
-        ADDRESS_HISTORY_BOX_MODEL.setSelectedItem(addressHistoryList.getFirst());
-        addressTextField.setText(addressHistoryList.getFirst());
-    }
-
-    /**
      * 获取书籍
      */
     private BookDTO getBook(String author, String name) {
@@ -337,6 +253,13 @@ public class BookshelfPanel extends JBPanel<BookshelfPanel> {
      * 在 ToolWindow 首次显示时调用
      */
     public void initAddressHistory() {
-        setAddressUI();
+        addressBarPanel.refreshHistory();
+    }
+
+    /**
+     * 刷新书架
+     */
+    public void refreshBookshelf(){
+        addressBarPanel.load();
     }
 }
