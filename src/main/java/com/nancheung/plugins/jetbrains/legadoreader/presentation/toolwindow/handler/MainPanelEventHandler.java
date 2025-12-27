@@ -140,10 +140,10 @@ public class MainPanelEventHandler {
         }
 
         // 从事件中获取新设置（优先使用事件中的值，回退到存储）
-        PluginSettingsStorage storage = PluginSettingsStorage.getInstance();
-        JBColor fontColor = event.fontColor() != null ? event.fontColor() : storage.getTextBodyFontColor();
-        Font font = event.font() != null ? event.font() : storage.getTextBodyFont();
-        double lineHeight = event.lineHeight() != null ? event.lineHeight() : storage.getTextBodyLineHeight();
+        PluginSettingsStorage.State state = PluginSettingsStorage.getInstance().getState();
+        JBColor fontColor = event.fontColor() != null ? event.fontColor() : state.textBodyFontColor;
+        Font font = event.font() != null ? event.font() : state.textBodyFont;
+        double lineHeight = event.lineHeight() != null ? event.lineHeight() : state.textBodyLineHeight;
 
         // 更新正文面板的字体样式
         textBodyPanel.applyStyle(fontColor, font, lineHeight);

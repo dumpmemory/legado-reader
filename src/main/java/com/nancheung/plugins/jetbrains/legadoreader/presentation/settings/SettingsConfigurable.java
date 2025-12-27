@@ -12,6 +12,7 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.Objects;
 
 public class SettingsConfigurable implements SearchableConfigurable {
 
@@ -53,12 +54,10 @@ public class SettingsConfigurable implements SearchableConfigurable {
 
         SettingsPanel ui = instance();
 
-        // 比较 UI 当前值与存储值是否不同
-        boolean fontColorModified = state.textBodyFontColorRgb == null ||
-                state.textBodyFontColorRgb != ui.getFontColorLabel().getBackground().getRGB();
+        boolean fontColorModified = !Objects.equals(state.textBodyFontColor, ui.getFontPreviewPane().getForeground());
 
-        boolean fontSizeModified = state.textBodyFontSize == null ||
-                !state.textBodyFontSize.equals(ui.getFontSizeSpinner().getValue());
+        Font uiFont = ui.getFontPreviewPane().getFont();
+        boolean fontModified = !Objects.equals(state.textBodyFont, uiFont);
 
         String currentCustomParam = ui.getApiCustomParamTextArea().getText();
         String storedCustomParam = state.apiCustomParam == null ? "" : state.apiCustomParam;
@@ -68,28 +67,13 @@ public class SettingsConfigurable implements SearchableConfigurable {
 
         boolean inLineModelModified = Boolean.TRUE.equals(state.enableShowBodyInLine) != ui.getEnableInLineModelCheckBox().isSelected();
 
-        // 新增：字体名称比较
-        String currentFontFamily = (String) ui.getFontFamilyComboBox().getSelectedItem();
-        String storedFontFamily = state.textBodyFontFamily;
-        if (storedFontFamily == null || storedFontFamily.isEmpty()) {
-            try {
-                storedFontFamily = com.intellij.openapi.editor.colors.EditorColorsManager.getInstance()
-                        .getGlobalScheme()
-                        .getFont(com.intellij.openapi.editor.colors.EditorFontType.PLAIN)
-                        .getFamily();
-            } catch (Exception e) {
-                storedFontFamily = new JLabel().getFont().getFamily();
-            }
-        }
-        boolean fontFamilyModified = !currentFontFamily.equals(storedFontFamily);
-
-        // 新增：行高比较（注意精度问题）
+        // 行高比较（注意精度问题）
         double currentLineHeight = (double) ui.getLineHeightSpinner().getValue();
         double storedLineHeight = state.textBodyLineHeight != null ? state.textBodyLineHeight : 1.5;
         boolean lineHeightModified = Math.abs(currentLineHeight - storedLineHeight) > 0.001;
 
-        return fontColorModified || fontSizeModified || customParamModified ||
-                errorLogModified || inLineModelModified || fontFamilyModified || lineHeightModified;
+        return fontColorModified || fontModified || customParamModified ||
+                errorLogModified || inLineModelModified || lineHeightModified;
     }
 
     @Override
@@ -107,9 +91,9 @@ public class SettingsConfigurable implements SearchableConfigurable {
 
         // 发布设置变更事件，通知 UI 更新
         PluginSettingsStorage storage = PluginSettingsStorage.getInstance();
-        JBColor fontColor = storage.getTextBodyFontColor();
-        Font font = storage.getTextBodyFont();
-        double lineHeight = storage.getTextBodyLineHeight();
+        JBColor fontColor = storage.getState().textBodyFontColor;
+        Font font = storage.getState().textBodyFont;
+        double lineHeight = storage.getState().textBodyLineHeight;
 
         EventPublisher.getInstance().publish(SettingsChangedEvent.fontSettings(fontColor, font, lineHeight));
     }
@@ -124,7 +108,6 @@ public class SettingsConfigurable implements SearchableConfigurable {
         if (settingsPanel == null) {
             settingsPanel = new SettingsPanel();
 
-            // 读取已有配置
             settingsPanel.readSettings(PluginSettingsStorage.getInstance().getState());
         }
         return settingsPanel;
@@ -137,15 +120,14 @@ public class SettingsConfigurable implements SearchableConfigurable {
         if (state == null) {
             return;
         }
-
-        state.textBodyFontColorRgb = ui.getFontColorLabel().getBackground().getRGB();
-        state.textBodyFontSize = (int) ui.getFontSizeSpinner().getValue();
         state.apiCustomParam = ui.getApiCustomParamTextArea().getText();
+
+        Color foreground = ui.getFontPreviewPane().getForeground();
+        state.textBodyFontColor = new JBColor(foreground,foreground);
+        state.textBodyFont = ui.getFontPreviewPane().getFont();
+        state.textBodyLineHeight = (double) ui.getLineHeightSpinner().getValue();
+
         state.enableErrorLog = ui.getEnableErrorLogCheckBox().isSelected();
         state.enableShowBodyInLine = ui.getEnableInLineModelCheckBox().isSelected();
-
-        // 新增：保存字体名称和行高
-        state.textBodyFontFamily = (String) ui.getFontFamilyComboBox().getSelectedItem();
-        state.textBodyLineHeight = (double) ui.getLineHeightSpinner().getValue();
     }
 }

@@ -1,6 +1,8 @@
 package com.nancheung.plugins.jetbrains.legadoreader.api;
 
 import cn.hutool.core.lang.TypeReference;
+import cn.hutool.core.text.StrPool;
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.core.util.URLUtil;
 import cn.hutool.http.HttpResponse;
 import cn.hutool.http.HttpUtil;
@@ -15,9 +17,11 @@ import com.nancheung.plugins.jetbrains.legadoreader.storage.PluginSettingsStorag
 import lombok.experimental.UtilityClass;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
- * API工具
+ * API 工具
  *
  * @author NanCheung
  */
@@ -44,7 +48,7 @@ public class ApiUtil {
      * @return 正文内容
      */
     public String getBookContent(String bookUrl, int bookIndex) {
-        // 调用API获取正文内容
+        // 调用 API获取正文内容
         String url = AddressHistoryStorage.getInstance().getMostRecent() + AddressEnum.GET_BOOK_CONTENT.getAddress() + "?url=" + URLUtil.encodeAll(bookUrl) + "&index=" + bookIndex;
 
         R<String> r = get(url, new TypeReference<>() {
@@ -59,7 +63,7 @@ public class ApiUtil {
      * @return 章节目录列表
      */
     public List<BookChapterDTO> getChapterList(String bookUrl) {
-        // 调用API获取书架目录
+        // 调用 API获取书架目录
         String url = AddressHistoryStorage.getInstance().getMostRecent() + AddressEnum.GET_CHAPTER_LIST.getAddress() + "?url=" + URLUtil.encodeAll(bookUrl);
 
         R<List<BookChapterDTO>> r = get(url, new TypeReference<>() {
@@ -72,7 +76,7 @@ public class ApiUtil {
      * 保存阅读进度
      */
     public void saveBookProgress(String author, String name, int index, String title, int durChapterPos) {
-        // 调用API获取书架目录
+        // 调用 API获取书架目录
         String url = AddressHistoryStorage.getInstance().getMostRecent() + AddressEnum.SAVE_BOOK_PROGRESS.getAddress();
 
         BookProgressDTO bookProgressDTO = BookProgressDTO.builder()
@@ -95,9 +99,9 @@ public class ApiUtil {
         String textBody;
 
         try {
-            textBody = HttpUtil.get(url, PluginSettingsStorage.getInstance().getApiCustomParam());
+            textBody = HttpUtil.get(url, parseCustomParams());
         } catch (Exception e) {
-            throw new RuntimeException(String.format("\n%s：%s\n参数：\n%s\n", "调用API失败", url, PluginSettingsStorage.getInstance().getApiCustomParam()), e);
+            throw new RuntimeException(String.format("\n%s：%s\n参数：\n%s\n", "调用API失败", url, parseCustomParams()), e);
         }
 
         return JSONUtil.toBean(textBody, typeReference, true);
@@ -106,15 +110,38 @@ public class ApiUtil {
     private <R> R post(String url, Object body, TypeReference<R> typeReference) {
         String textBody;
         try (HttpResponse execute = HttpUtil.createPost(url)
-                .form(PluginSettingsStorage.getInstance().getApiCustomParam())
+                .form(parseCustomParams())
                 .body(JSONUtil.toJsonStr(body))
                 .execute()) {
             textBody = execute.body();
         } catch (Exception e) {
-            throw new RuntimeException(String.format("\n%s：%s\n参数：\n%s\n%s\n", "调用API失败", url, PluginSettingsStorage.getInstance().getApiCustomParam(), body), e);
+            throw new RuntimeException(String.format("\n%s：%s\n参数：\n%s\n%s\n", "调用API失败", url, parseCustomParams(), body), e);
         }
 
         return JSONUtil.toBean(textBody, typeReference, true);
+    }
+
+    /**
+     * 解析 API 自定义参数
+     * 格式：参数名:@参数值（每行一个）
+     *
+     * @return 参数 Map
+     */
+    private static Map<String, Object> parseCustomParams() {
+        String param = PluginSettingsStorage.getInstance().getState().apiCustomParam;
+        if (StrUtil.isBlank(param)) {
+            return Map.of();
+        }
+
+        // 按照回车符分割，取出所有自定义参数
+        List<String> apiCustomParamList = StrUtil.split(param, "\n");
+
+        // 按照 :@ 分割，取出参数名和参数值,转成map
+        return apiCustomParamList.stream()
+                .filter(StrUtil::isNotEmpty)
+                .filter(s -> s.contains(StrPool.COLON + StrPool.AT))
+                .map(s -> StrUtil.split(s, StrPool.COLON + StrPool.AT))
+                .collect(Collectors.toMap(List::getFirst, l -> l.get(1), (a, b) -> b));
     }
 
 }

@@ -37,12 +37,12 @@ public class TextBodyStyling {
      * @param textPane 目标文本组件
      */
     public void applyFromSettings(JTextPane textPane) {
-        PluginSettingsStorage storage = PluginSettingsStorage.getInstance();
+        PluginSettingsStorage.State state = PluginSettingsStorage.getInstance().getState();
         apply(
                 textPane,
-                storage.getTextBodyFontColor(),
-                storage.getTextBodyFont(),
-                storage.getTextBodyLineHeight()
+                state.textBodyFontColor,
+                state.textBodyFont,
+                state.textBodyLineHeight
         );
     }
 

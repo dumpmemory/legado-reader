@@ -72,7 +72,7 @@ public class ReaderEditorLinePainter extends EditorLinePainter {
 
         // 设置文本样式
         TextAttributes textAttributes = new TextAttributes();
-        textAttributes.setForegroundColor(PluginSettingsStorage.getInstance().getTextBodyFontColor());
+        textAttributes.setForegroundColor(PluginSettingsStorage.getInstance().getState().textBodyFontColor);
         textAttributes.setFontType(Font.ITALIC);
 
         return Collections.singleton(new LineExtensionInfo(displayText, textAttributes));

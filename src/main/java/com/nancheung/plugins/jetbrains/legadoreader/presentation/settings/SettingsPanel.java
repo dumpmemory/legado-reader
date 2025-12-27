@@ -1,7 +1,6 @@
 package com.nancheung.plugins.jetbrains.legadoreader.presentation.settings;
 
-import com.intellij.openapi.editor.colors.EditorColorsManager;
-import com.intellij.openapi.editor.colors.EditorFontType;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.ui.ColorPicker;
 import com.intellij.ui.IdeBorderFactory;
@@ -11,6 +10,7 @@ import com.intellij.util.ui.FormBuilder;
 import com.intellij.util.ui.JBUI;
 import com.nancheung.plugins.jetbrains.legadoreader.storage.PluginSettingsStorage;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -19,10 +19,11 @@ import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
 
+@Slf4j
 @Getter
 public class SettingsPanel {
 
@@ -44,8 +45,8 @@ public class SettingsPanel {
     private JBCheckBox enableInLineModelCheckBox;
 
     // ==================== 阅读界面设置组件 ====================
-    private JBLabel fontColorLabel;
-    private ComboBox<String> fontFamilyComboBox;
+    private JButton fontColorButton;
+    private ComboBox<String> fontNameComboBox;
     private JSpinner fontSizeSpinner;
     private JSpinner lineHeightSpinner;
     private JTextPane fontPreviewPane;
@@ -83,16 +84,12 @@ public class SettingsPanel {
     }
 
     private void createReadingInterfaceComponents() {
-        // 字体颜色标签（显示为颜色块）
-        fontColorLabel = new JBLabel(" ");
-        fontColorLabel.setOpaque(true);
-        fontColorLabel.setBackground(JBColor.BLACK);
-        fontColorLabel.setPreferredSize(JBUI.size(60, 25));
-        fontColorLabel.setBorder(BorderFactory.createLineBorder(JBColor.GRAY));
-        fontColorLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        // 字体颜色按钮（仅作为触发器，不显示颜色）
+        fontColorButton = new JButton("选择颜色");
+        fontColorButton.setPreferredSize(JBUI.size(120, 25));
 
         // 字体选择下拉框
-        fontFamilyComboBox = createFontFamilyComboBox();
+        fontNameComboBox = createFontNameComboBox();
 
         // 字体大小 Spinner
         fontSizeSpinner = createFontSizeSpinner();
@@ -105,12 +102,12 @@ public class SettingsPanel {
     }
 
     @NotNull
-    private ComboBox<String> createFontFamilyComboBox() {
+    private ComboBox<String> createFontNameComboBox() {
         GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
-        String[] fontFamilies = ge.getAvailableFontFamilyNames();
-        Arrays.sort(fontFamilies);
+        String[] fontNames = Arrays.stream(ge.getAllFonts()).map(Font::getFontName).toArray(String[]::new);
+        Arrays.sort(fontNames);
 
-        ComboBox<String> comboBox = new ComboBox<>(fontFamilies);
+        ComboBox<String> comboBox = new ComboBox<>(fontNames);
         Dimension size = JBUI.size(200, 25);
         comboBox.setPreferredSize(size);
         comboBox.setMinimumSize(size);
@@ -121,8 +118,8 @@ public class SettingsPanel {
             public Component getListCellRendererComponent(JList<?> list, Object value,
                                                           int index, boolean isSelected, boolean cellHasFocus) {
                 super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-                if (value instanceof String fontFamily) {
-                    setFont(new Font(fontFamily, Font.PLAIN, getFont().getSize()));
+                if (value instanceof String fontName) {
+                    setFont(new Font(fontName, Font.PLAIN, getFont().getSize()));
                 }
                 return this;
             }
@@ -226,14 +223,11 @@ public class SettingsPanel {
 
     @NotNull
     private JPanel createReadingInterfacePanel() {
-        // 左侧表单 - 使用 GridBagLayout 手动布局
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.add(fontColorLabel, BorderLayout.WEST);
-
+        // 左侧表单
         JPanel formPanel = FormBuilder.createFormBuilder()
                 .setVerticalGap(JBUI.scale(5))
-                .addLabeledComponent(new JBLabel("正文字体颜色:"), panel, false)
-                .addLabeledComponent(new JBLabel("正文字体:"), fontFamilyComboBox, false)
+                .addLabeledComponent(new JBLabel("正文字体颜色:"), fontColorButton, false)
+                .addLabeledComponent(new JBLabel("正文字体:"), fontNameComboBox, false)
                 .addLabeledComponent(new JBLabel("正文字体大小 (0为默认):"), fontSizeSpinner, false)
                 .addLabeledComponent(new JBLabel("正文字体行高:"), lineHeightSpinner, false)
                 .addComponentFillVertically(new JPanel(), 0)
@@ -258,55 +252,61 @@ public class SettingsPanel {
 
     private void bindEventListeners() {
         // 颜色选择器点击事件
-        fontColorLabel.addMouseListener(createColorPickerListener());
+        fontColorButton.addActionListener(e -> openColorPicker());
 
         // 预览更新监听器
-        fontColorLabel.addPropertyChangeListener("background", evt -> updateFontPreview());
-        fontFamilyComboBox.addActionListener(e -> updateFontPreview());
+        fontNameComboBox.addActionListener(e -> updateFontPreview());
         fontSizeSpinner.addChangeListener(e -> updateFontPreview());
         lineHeightSpinner.addChangeListener(e -> updateFontPreview());
     }
 
-    @NotNull
-    private MouseAdapter createColorPickerListener() {
-        return new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                Color currentColor = fontColorLabel.getBackground();
-                Color newColor = ColorPicker.showDialog(
-                        rootPanel,
-                        "选择字体颜色",
-                        currentColor,
-                        true,
-                        null,
-                        true
-                );
-                if (newColor != null) {
-                    fontColorLabel.setBackground(newColor);
-                }
-            }
-        };
+    /**
+     * 打开颜色选择器
+     */
+    private void openColorPicker() {
+        Color currentColor = fontPreviewPane.getForeground();
+        Color newColor = ColorPicker.showDialog(
+                rootPanel,
+                "选择字体颜色",
+                currentColor,
+                true,
+                null,
+                true
+        );
+        if (newColor != null) {
+            fontPreviewPane.setForeground(newColor);
+        }
     }
 
     private void updateFontPreview() {
-        SwingUtilities.invokeLater(() -> {
             try {
-                Color fontColor = fontColorLabel.getBackground();
-                String fontFamily = (String) fontFamilyComboBox.getSelectedItem();
-                int fontSize = (int) fontSizeSpinner.getValue();
-                double lineHeight = (double) lineHeightSpinner.getValue();
+                String fontName = (String) fontNameComboBox.getSelectedItem();
 
+                int fontSize = (int) fontSizeSpinner.getValue();
                 if (fontSize == 0) {
-                    fontSize = new JLabel().getFont().getSize();
+                    fontSize = fontSizeSpinner.getFont().getSize();
                 }
 
-                fontPreviewPane.setForeground(fontColor);
-                fontPreviewPane.setFont(new Font(fontFamily, Font.PLAIN, fontSize));
+                double lineHeight = (double) lineHeightSpinner.getValue();
 
-                applyLineHeight(lineHeight);
-            } catch (Exception ignored) {
+                updateFontPreview(new Font(fontName, Font.PLAIN, fontSize),
+                        new JBColor(fontPreviewPane.getForeground(), fontPreviewPane.getForeground()),
+                        lineHeight);
+            } catch (Exception e) {
                 // 忽略预览更新异常
+                log.error("更新字体预览时出错", e);
             }
+    }
+
+    private void updateFontPreview(PluginSettingsStorage.State state) {
+        updateFontPreview(state.textBodyFont, state.textBodyFontColor, state.textBodyLineHeight);
+    }
+
+    private void updateFontPreview(Font font, JBColor textBodyFontColor, Double lineHeight) {
+        ApplicationManager.getApplication().invokeLater(() -> {
+            Optional.ofNullable(font).ifPresent(fontPreviewPane::setFont);
+            Optional.ofNullable(textBodyFontColor).ifPresent(fontPreviewPane::setForeground);
+            Optional.ofNullable(lineHeight).ifPresent(this::applyLineHeight);
         });
     }
 
@@ -330,52 +330,21 @@ public class SettingsPanel {
             return;
         }
 
-        // 字体颜色
-        if (state.textBodyFontColorRgb != null) {
-            fontColorLabel.setBackground(
-                    new JBColor(state.textBodyFontColorRgb,state.textBodyFontColorRgb)
-            );
-        }
-
-        // 字体大小
-        if (state.textBodyFontSize != null && state.textBodyFontSize >= 0) {
-            fontSizeSpinner.setValue(state.textBodyFontSize);
-        }
-
-        // API 自定义参数
-        if (state.apiCustomParam != null && !state.apiCustomParam.isEmpty()) {
+        if (!state.apiCustomParam.isEmpty()) {
             apiCustomParamTextArea.setText(state.apiCustomParam);
         }
 
+
+        fontSizeSpinner.setValue(state.textBodyFont.getSize());
+        fontNameComboBox.setSelectedItem(state.textBodyFont.getFontName());
+
+        lineHeightSpinner.setValue(state.textBodyLineHeight);
+
         // 复选框
-        enableErrorLogCheckBox.setSelected(Boolean.TRUE.equals(state.enableErrorLog));
-        enableInLineModelCheckBox.setSelected(Boolean.TRUE.equals(state.enableShowBodyInLine));
-
-        // 字体名称
-        String fontFamily = state.textBodyFontFamily;
-        if (fontFamily == null || fontFamily.isEmpty()) {
-            fontFamily = getDefaultFontFamily();
-        }
-        fontFamilyComboBox.setSelectedItem(fontFamily);
-
-        // 行高
-        if (state.textBodyLineHeight != null) {
-            lineHeightSpinner.setValue(state.textBodyLineHeight);
-        }
+        enableErrorLogCheckBox.setSelected(state.enableErrorLog);
+        enableInLineModelCheckBox.setSelected(state.enableShowBodyInLine);
 
         // 更新预览
-        updateFontPreview();
-    }
-
-    @NotNull
-    private String getDefaultFontFamily() {
-        try {
-            return EditorColorsManager.getInstance()
-                    .getGlobalScheme()
-                    .getFont(EditorFontType.PLAIN)
-                    .getFamily();
-        } catch (Exception e) {
-            return new JLabel().getFont().getFamily();
-        }
+        updateFontPreview(state);
     }
 }
