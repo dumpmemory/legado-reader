@@ -54,22 +54,11 @@ public abstract class UIEventSubscriber implements ReaderEventListener {
      */
     private void dispatchEvent(ReaderEvent event) {
         switch (event) {
-            case CommandEvent e -> onCommandEvent(e);
             case BookshelfEvent e -> onBookshelfEvent(e);
             case ReadingEvent e -> onReadingEvent(e);
             case PaginationEvent e -> onPaginationEvent(e);
             case SettingsChangedEvent e -> onSettingsChangedEvent(e);
         }
-    }
-
-    /**
-     * 处理指令生命周期事件
-     * 用于显示 loading 状态、成功/失败提示等
-     *
-     * @param event 指令事件
-     */
-    protected void onCommandEvent(CommandEvent event) {
-        // 子类可选择性重写
     }
 
     /**

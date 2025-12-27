@@ -6,7 +6,6 @@ import com.nancheung.plugins.jetbrains.legadoreader.api.dto.BookDTO;
 import com.nancheung.plugins.jetbrains.legadoreader.command.Command;
 import com.nancheung.plugins.jetbrains.legadoreader.command.CommandType;
 import com.nancheung.plugins.jetbrains.legadoreader.command.payload.SelectBookPayload;
-import com.nancheung.plugins.jetbrains.legadoreader.event.CommandEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.event.EventPublisher;
 import com.nancheung.plugins.jetbrains.legadoreader.event.ReadingEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.manager.ReadingSessionManager;
@@ -40,7 +39,7 @@ public class SelectBookHandler implements CommandHandler<SelectBookPayload> {
 
         // 1. 获取参数
         if (!(command.payload() instanceof SelectBookPayload(BookDTO book, int chapterIndex))) {
-            publisher.publish(CommandEvent.failed(command, "参数类型错误"));
+            log.warn("参数类型错误");
             return;
         }
 
@@ -49,13 +48,12 @@ public class SelectBookHandler implements CommandHandler<SelectBookPayload> {
         // 2. 检查当前状态，防止重复加载
         if (stateMachine.isLoading()) {
             log.warn("当前正在加载中，忽略新的加载请求");
-            publisher.publish(CommandEvent.failed(command, "当前正在加载中，请稍后再试"));
             return;
         }
 
         // 3. 状态转换到加载中
         if (!stateMachine.transition(ReadingSessionState.LOADING)) {
-            publisher.publish(CommandEvent.failed(command, "当前状态不允许加载章节"));
+            log.warn("当前状态不允许加载章节");
             return;
         }
 
@@ -103,8 +101,6 @@ public class SelectBookHandler implements CommandHandler<SelectBookPayload> {
                         ReadingEvent.Direction.JUMP
                 ));
 
-                publisher.publish(CommandEvent.completed(command, "打开: " + book.getName()));
-
                 log.info("章节加载成功: {}", chapter.getTitle());
 
                 // 异步同步进度
@@ -124,8 +120,6 @@ public class SelectBookHandler implements CommandHandler<SelectBookPayload> {
                         e,
                         ReadingEvent.Direction.JUMP
                 ));
-
-                publisher.publish(CommandEvent.failed(command, e.getMessage()));
 
                 if (Boolean.TRUE.equals(PluginSettingsStorage.getInstance().getState().enableErrorLog)) {
                     log.error("章节加载失败", e);

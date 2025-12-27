@@ -3,7 +3,6 @@ package com.nancheung.plugins.jetbrains.legadoreader.command.handler;
 import com.nancheung.plugins.jetbrains.legadoreader.command.Command;
 import com.nancheung.plugins.jetbrains.legadoreader.command.CommandType;
 import com.nancheung.plugins.jetbrains.legadoreader.command.payload.CommandPayload;
-import com.nancheung.plugins.jetbrains.legadoreader.event.CommandEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.event.EventPublisher;
 import com.nancheung.plugins.jetbrains.legadoreader.event.ReadingEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.manager.ReadingSessionManager;
@@ -45,9 +44,6 @@ public class BackToBookshelfHandler implements CommandHandler<CommandPayload> {
 
         // 4. 状态转换到空闲
         stateMachine.reset();
-
-        // 5. 发布指令完成事件
-        publisher.publish(CommandEvent.completed(command, "已返回书架"));
 
         log.debug("阅读会话已清空");
     }

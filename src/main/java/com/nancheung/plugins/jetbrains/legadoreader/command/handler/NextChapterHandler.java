@@ -6,7 +6,6 @@ import com.nancheung.plugins.jetbrains.legadoreader.api.dto.BookDTO;
 import com.nancheung.plugins.jetbrains.legadoreader.command.Command;
 import com.nancheung.plugins.jetbrains.legadoreader.command.CommandType;
 import com.nancheung.plugins.jetbrains.legadoreader.command.payload.CommandPayload;
-import com.nancheung.plugins.jetbrains.legadoreader.event.CommandEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.event.EventPublisher;
 import com.nancheung.plugins.jetbrains.legadoreader.event.ReadingEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.manager.ReadingSessionManager;
@@ -43,7 +42,7 @@ public class NextChapterHandler implements CommandHandler<CommandPayload> {
 
         // 1. 前置检查：是否有当前阅读会话
         if (session == null) {
-            publisher.publish(CommandEvent.failed(command, "没有当前阅读会话"));
+            log.warn("没有当前阅读会话");
             return;
         }
 
@@ -52,20 +51,19 @@ public class NextChapterHandler implements CommandHandler<CommandPayload> {
         int totalChapters = session.chapters().size();
 
         if (currentIndex >= totalChapters - 1) {
-            publisher.publish(CommandEvent.failed(command, "已经是最后一章"));
+            log.warn("已经是最后一章");
             return;
         }
 
         // 3. 检查当前状态，防止重复加载
         if (stateMachine.isLoading()) {
             log.warn("当前正在加载中，忽略切换章节请求");
-            publisher.publish(CommandEvent.failed(command, "当前正在加载中，请稍后再试"));
             return;
         }
 
         // 4. 状态转换：READING → LOADING
         if (!stateMachine.transition(ReadingSessionState.LOADING)) {
-            publisher.publish(CommandEvent.failed(command, "当前状态不允许切换章节"));
+            log.warn("当前状态不允许切换章节");
             return;
         }
 
@@ -110,9 +108,6 @@ public class NextChapterHandler implements CommandHandler<CommandPayload> {
                         ReadingEvent.Direction.NEXT
                 ));
 
-                // 7.5 发布"指令完成"事件
-                publisher.publish(CommandEvent.completed(command, "切换到: " + chapter.getTitle()));
-
                 log.info("切换到下一章成功：{}", chapter.getTitle());
 
                 // 7.6 异步同步进度到服务器（不等待）
@@ -132,10 +127,7 @@ public class NextChapterHandler implements CommandHandler<CommandPayload> {
                         ReadingEvent.Direction.NEXT
                 ));
 
-                // 7.2 发布"指令失败"事件
-                publisher.publish(CommandEvent.failed(command, e.getMessage()));
-
-                // 7.3 记录错误日志（如果启用）
+                // 7.2 记录错误日志（如果启用）
                 if (Boolean.TRUE.equals(PluginSettingsStorage.getInstance().getState().enableErrorLog)) {
                     log.error("切换到下一章失败", e);
                 }

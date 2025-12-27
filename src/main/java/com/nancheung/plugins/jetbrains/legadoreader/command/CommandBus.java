@@ -3,8 +3,6 @@ package com.nancheung.plugins.jetbrains.legadoreader.command;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.components.Service;
 import com.nancheung.plugins.jetbrains.legadoreader.command.handler.CommandHandler;
-import com.nancheung.plugins.jetbrains.legadoreader.event.CommandEvent;
-import com.nancheung.plugins.jetbrains.legadoreader.event.EventPublisher;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.CompletableFuture;
@@ -20,7 +18,6 @@ import java.util.concurrent.CompletableFuture;
 @Service
 public final class CommandBus {
 
-    private final EventPublisher eventPublisher;
     private final CommandHandlerRegistry registry;
 
     /**
@@ -34,7 +31,6 @@ public final class CommandBus {
      * 构造函数（由 IntelliJ Platform 调用）
      */
     public CommandBus() {
-        this.eventPublisher = EventPublisher.getInstance();
         this.registry = CommandHandlerRegistry.getInstance();
     }
 
@@ -50,8 +46,7 @@ public final class CommandBus {
         registry.getHandler(command.type()).ifPresentOrElse(
                 handler -> executeHandler(command, handler),
                 () -> {
-                    log.warn("未找到指令处理器: {}", command.type());
-                    eventPublisher.publish(CommandEvent.failed(command, "未找到指令处理器"));
+                    log.error("未找到指令处理器: {}", command.type());
                 }
         );
     }
@@ -73,12 +68,8 @@ public final class CommandBus {
         // 1. 前置检查
         if (!handler.canHandle(command)) {
             log.warn("处理器拒绝处理指令: type={}, handler={}", command.type(), handler.getClass().getSimpleName());
-            eventPublisher.publish(CommandEvent.failed(command, "处理器拒绝处理"));
             return;
         }
-
-        // 2. 发布指令开始事件
-        eventPublisher.publish(CommandEvent.started(command));
 
         try {
             // 3. 执行处理器
@@ -86,9 +77,8 @@ public final class CommandBus {
             handler.handle(command);
 
         } catch (Exception e) {
-            // 4. 如果处理器直接抛出异常，发布失败事件
+            // 4. 如果处理器直接抛出异常，记录错误日志
             log.error("指令执行失败: type={}", command.type(), e);
-            eventPublisher.publish(CommandEvent.failed(command, e.getMessage()));
         }
     }
 }
