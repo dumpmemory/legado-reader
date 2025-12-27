@@ -7,6 +7,7 @@ import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.components.State;
 import com.intellij.openapi.components.Storage;
+import com.intellij.ui.JBColor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -90,9 +91,9 @@ public final class PluginSettingsStorage implements PersistentStateComponent<Plu
      *
      * @return 字体颜色
      */
-    public Color getTextBodyFontColor() {
+    public JBColor getTextBodyFontColor() {
         Integer rgb = getState().textBodyFontColorRgb;
-        return rgb != null ? new Color(rgb) : Color.BLACK;
+        return rgb != null ? new JBColor(rgb,rgb) : JBColor.green;
     }
 
     /**

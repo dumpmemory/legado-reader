@@ -20,9 +20,9 @@ public class MainReaderPanelFactory implements ToolWindowFactory {
         // 初始化地址历史记录（延迟访问 Service）
         mainReaderPanel.initAddressHistory();
 
-        //获取用于toolWindow显示的内容
+        // 获取用于 toolWindow显示的内容
         Content content = contentFactory.createContent(mainReaderPanel.getComponent(), "", false);
-        //给toolWindow设置内容
+        // 给 toolWindow设置内容
         toolWindow.getContentManager().addContent(content);
     }
 }

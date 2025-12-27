@@ -1,6 +1,7 @@
 package com.nancheung.plugins.jetbrains.legadoreader.presentation.settings;
 
 import com.intellij.openapi.options.SearchableConfigurable;
+import com.intellij.ui.JBColor;
 import com.nancheung.plugins.jetbrains.legadoreader.common.Constant;
 import com.nancheung.plugins.jetbrains.legadoreader.event.EventPublisher;
 import com.nancheung.plugins.jetbrains.legadoreader.event.SettingsChangedEvent;
@@ -106,13 +107,11 @@ public class SettingsConfigurable implements SearchableConfigurable {
 
         // 发布设置变更事件，通知 UI 更新
         PluginSettingsStorage storage = PluginSettingsStorage.getInstance();
-        Color fontColor = storage.getTextBodyFontColor();
+        JBColor fontColor = storage.getTextBodyFontColor();
         Font font = storage.getTextBodyFont();
         double lineHeight = storage.getTextBodyLineHeight();
 
-        EventPublisher.getInstance().publish(
-                SettingsChangedEvent.fontSettings(fontColor, font, lineHeight)
-        );
+        EventPublisher.getInstance().publish(SettingsChangedEvent.fontSettings(fontColor, font, lineHeight));
     }
 
     /**

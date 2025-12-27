@@ -1,5 +1,6 @@
 package com.nancheung.plugins.jetbrains.legadoreader.event;
 
+import com.intellij.ui.JBColor;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
@@ -24,7 +25,7 @@ public record SettingsChangedEvent(
         long timestamp,
         @Nullable String commandId,
         SettingsChangedType type,
-        @Nullable Color fontColor,
+        @Nullable JBColor fontColor,
         @Nullable Font font,
         @Nullable Double lineHeight,
         @Nullable Boolean enableShowBodyInLine
@@ -53,7 +54,7 @@ public record SettingsChangedEvent(
     /**
      * 创建字体设置变更事件
      */
-    public static SettingsChangedEvent fontSettings(Color fontColor, Font font, double lineHeight) {
+    public static SettingsChangedEvent fontSettings(JBColor fontColor, Font font, double lineHeight) {
         return new SettingsChangedEvent(
                 UUID.randomUUID().toString(),
                 System.currentTimeMillis(),
@@ -86,7 +87,7 @@ public record SettingsChangedEvent(
      * 创建所有设置变更事件
      */
     public static SettingsChangedEvent allSettings(
-            Color fontColor,
+            JBColor fontColor,
             Font font,
             double lineHeight,
             boolean enableShowBodyInLine) {

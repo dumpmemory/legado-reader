@@ -333,7 +333,7 @@ public class SettingsPanel {
         // 字体颜色
         if (state.textBodyFontColorRgb != null) {
             fontColorLabel.setBackground(
-                    new JBColor(new Color(state.textBodyFontColorRgb), new Color(state.textBodyFontColorRgb))
+                    new JBColor(state.textBodyFontColorRgb,state.textBodyFontColorRgb)
             );
         }
 

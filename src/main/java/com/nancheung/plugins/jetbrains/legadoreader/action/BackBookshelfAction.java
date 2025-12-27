@@ -13,12 +13,14 @@ public class BackBookshelfAction extends AnAction {
     }
 
     private void backBookshelf() {
-        MainReaderPanel indexUI = MainReaderPanel.getInstance();
-        indexUI.refreshBookshelf(bookDTOS -> {
+        MainReaderPanel mainPanel = MainReaderPanel.getInstance();
+
+        // 刷新书架
+        mainPanel.getBookshelfPanel().refreshBookshelf(bookDTOS -> {
         }, throwable -> {
         });
 
-        indexUI.getTextBodyPanel().setVisible(false);
-        indexUI.getBookshelfPanel().setVisible(true);
+        // 显示书架面板
+        mainPanel.showBookshelfPanel();
     }
 }
