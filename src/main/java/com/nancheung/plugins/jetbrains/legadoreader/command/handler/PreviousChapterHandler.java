@@ -6,7 +6,6 @@ import com.nancheung.plugins.jetbrains.legadoreader.api.dto.BookDTO;
 import com.nancheung.plugins.jetbrains.legadoreader.command.Command;
 import com.nancheung.plugins.jetbrains.legadoreader.command.CommandType;
 import com.nancheung.plugins.jetbrains.legadoreader.command.payload.CommandPayload;
-import com.nancheung.plugins.jetbrains.legadoreader.event.CommandEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.event.EventPublisher;
 import com.nancheung.plugins.jetbrains.legadoreader.event.ReadingEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.manager.ReadingSessionManager;
@@ -42,27 +41,26 @@ public class PreviousChapterHandler implements CommandHandler<CommandPayload> {
 
         // 1. 前置检查
         if (session == null) {
-            publisher.publish(CommandEvent.failed(command, "没有当前阅读会话"));
+            log.warn("没有当前阅读会话");
             return;
         }
 
         int currentIndex = sessionManager.getCurrentChapterIndex();
 
         if (currentIndex <= 0) {
-            publisher.publish(CommandEvent.failed(command, "已经是第一章"));
+            log.warn("已经是第一章");
             return;
         }
 
         // 2. 检查当前状态，防止重复加载
         if (stateMachine.isLoading()) {
             log.warn("当前正在加载中，忽略切换章节请求");
-            publisher.publish(CommandEvent.failed(command, "当前正在加载中，请稍后再试"));
             return;
         }
 
         // 3. 状态转换
         if (!stateMachine.transition(ReadingSessionState.LOADING)) {
-            publisher.publish(CommandEvent.failed(command, "当前状态不允许切换章节"));
+            log.warn("当前状态不允许切换章节");
             return;
         }
 
@@ -106,8 +104,6 @@ public class PreviousChapterHandler implements CommandHandler<CommandPayload> {
                         ReadingEvent.Direction.PREVIOUS
                 ));
 
-                publisher.publish(CommandEvent.completed(command, "切换到: " + chapter.getTitle()));
-
                 log.info("切换到上一章成功：{}", chapter.getTitle());
 
                 // 异步同步进度
@@ -125,8 +121,6 @@ public class PreviousChapterHandler implements CommandHandler<CommandPayload> {
                         e,
                         ReadingEvent.Direction.PREVIOUS
                 ));
-
-                publisher.publish(CommandEvent.failed(command, e.getMessage()));
 
                 if (Boolean.TRUE.equals(PluginSettingsStorage.getInstance().getState().enableErrorLog)) {
                     log.error("切换到上一章失败", e);

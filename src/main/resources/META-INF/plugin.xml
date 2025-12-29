@@ -15,14 +15,14 @@
     <extensions defaultExtensionNs="com.intellij">
         <projectConfigurable id="com.nancheung.legado-reader.setting"
                              groupId="tools" displayName="Legado Reader"
-                             instance="com.nancheung.plugins.jetbrains.legadoreader.gui.SettingFactory"/>
+                             instance="com.nancheung.plugins.jetbrains.legadoreader.presentation.settings.SettingsConfigurable"/>
 
         <toolWindow id="Legado Reader"
                     secondary="true"
-                    anchor="right" factoryClass="com.nancheung.plugins.jetbrains.legadoreader.toolwindow.IndexWindowFactory" icon="/META-INF/pluginIcon.svg">
+                    anchor="right" factoryClass="com.nancheung.plugins.jetbrains.legadoreader.presentation.toolwindow.MainReaderPanelFactory" icon="/META-INF/pluginIcon.svg">
         </toolWindow>
 
-        <editor.linePainter implementation="com.nancheung.plugins.jetbrains.legadoreader.editorline.ReaderEditorLinePainter"/>
+        <editor.linePainter implementation="com.nancheung.plugins.jetbrains.legadoreader.presentation.editorline.ReaderEditorLinePainter"/>
 
         <!-- 指令处理器初始化器（在插件启动时自动注册所有处理器） -->
         <postStartupActivity implementation="com.nancheung.plugins.jetbrains.legadoreader.command.CommandHandlerInitializer"/>

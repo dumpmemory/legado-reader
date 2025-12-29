@@ -15,9 +15,11 @@ import com.nancheung.plugins.jetbrains.legadoreader.storage.PluginSettingsStorag
 import lombok.experimental.UtilityClass;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
- * API工具
+ * API 工具
  *
  * @author NanCheung
  */
@@ -44,7 +46,7 @@ public class ApiUtil {
      * @return 正文内容
      */
     public String getBookContent(String bookUrl, int bookIndex) {
-        // 调用API获取正文内容
+        // 调用 API获取正文内容
         String url = AddressHistoryStorage.getInstance().getMostRecent() + AddressEnum.GET_BOOK_CONTENT.getAddress() + "?url=" + URLUtil.encodeAll(bookUrl) + "&index=" + bookIndex;
 
         R<String> r = get(url, new TypeReference<>() {
@@ -59,7 +61,7 @@ public class ApiUtil {
      * @return 章节目录列表
      */
     public List<BookChapterDTO> getChapterList(String bookUrl) {
-        // 调用API获取书架目录
+        // 调用 API获取书架目录
         String url = AddressHistoryStorage.getInstance().getMostRecent() + AddressEnum.GET_CHAPTER_LIST.getAddress() + "?url=" + URLUtil.encodeAll(bookUrl);
 
         R<List<BookChapterDTO>> r = get(url, new TypeReference<>() {
@@ -72,7 +74,7 @@ public class ApiUtil {
      * 保存阅读进度
      */
     public void saveBookProgress(String author, String name, int index, String title, int durChapterPos) {
-        // 调用API获取书架目录
+        // 调用 API获取书架目录
         String url = AddressHistoryStorage.getInstance().getMostRecent() + AddressEnum.SAVE_BOOK_PROGRESS.getAddress();
 
         BookProgressDTO bookProgressDTO = BookProgressDTO.builder()
@@ -95,9 +97,9 @@ public class ApiUtil {
         String textBody;
 
         try {
-            textBody = HttpUtil.get(url, PluginSettingsStorage.getInstance().getApiCustomParam());
+            textBody = HttpUtil.get(url, parseCustomParams());
         } catch (Exception e) {
-            throw new RuntimeException(String.format("\n%s：%s\n参数：\n%s\n", "调用API失败", url, PluginSettingsStorage.getInstance().getApiCustomParam()), e);
+            throw new RuntimeException(String.format("\n%s：%s\n参数：\n%s\n", "调用API失败", url, parseCustomParams()), e);
         }
 
         return JSONUtil.toBean(textBody, typeReference, true);
@@ -106,15 +108,35 @@ public class ApiUtil {
     private <R> R post(String url, Object body, TypeReference<R> typeReference) {
         String textBody;
         try (HttpResponse execute = HttpUtil.createPost(url)
-                .form(PluginSettingsStorage.getInstance().getApiCustomParam())
+                .form(parseCustomParams())
                 .body(JSONUtil.toJsonStr(body))
                 .execute()) {
             textBody = execute.body();
         } catch (Exception e) {
-            throw new RuntimeException(String.format("\n%s：%s\n参数：\n%s\n%s\n", "调用API失败", url, PluginSettingsStorage.getInstance().getApiCustomParam(), body), e);
+            throw new RuntimeException(String.format("\n%s：%s\n参数：\n%s\n%s\n", "调用API失败", url, parseCustomParams(), body), e);
         }
 
         return JSONUtil.toBean(textBody, typeReference, true);
+    }
+
+    /**
+     * 解析 API 自定义参数
+     * 从参数列表中过滤并转换为 Map
+     * 允许参数值为空，只过滤空参数名
+     *
+     * @return 参数 Map
+     */
+    private static Map<String, Object> parseCustomParams() {
+        List<PluginSettingsStorage.CustomParam> params =
+                PluginSettingsStorage.getInstance().getState().apiCustomParams;
+
+        return params.stream()
+                .filter(p -> p.name != null && !p.name.trim().isEmpty())  // 只过滤空参数名
+                .collect(Collectors.toMap(
+                        p -> p.name,
+                        p -> p.value != null ? p.value : "",  // value 为 null 时使用空字符串
+                        (a, b) -> b  // 重复键时保留后者
+                ));
     }
 
 }

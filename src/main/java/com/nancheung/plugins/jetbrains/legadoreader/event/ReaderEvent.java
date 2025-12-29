@@ -10,10 +10,10 @@ import org.jetbrains.annotations.Nullable;
  * @author NanCheung
  */
 public sealed interface ReaderEvent permits
-        CommandEvent,
         BookshelfEvent,
         ReadingEvent,
-        PaginationEvent {
+        PaginationEvent,
+        SettingsChangedEvent {
 
     /**
      * 事件唯一 ID

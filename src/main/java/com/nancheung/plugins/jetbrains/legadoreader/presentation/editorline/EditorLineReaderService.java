@@ -1,4 +1,4 @@
-package com.nancheung.plugins.jetbrains.legadoreader.editorline;
+package com.nancheung.plugins.jetbrains.legadoreader.presentation.editorline;
 
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.editor.Editor;
@@ -9,6 +9,8 @@ import com.nancheung.plugins.jetbrains.legadoreader.event.PaginationEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.event.ReaderEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.event.ReaderEventListener;
 import com.nancheung.plugins.jetbrains.legadoreader.event.ReadingEvent;
+import com.nancheung.plugins.jetbrains.legadoreader.event.SettingsChangedEvent;
+import com.nancheung.plugins.jetbrains.legadoreader.presentation.common.UIEventSubscriber;
 import com.nancheung.plugins.jetbrains.legadoreader.service.PaginationManager;
 import com.nancheung.plugins.jetbrains.legadoreader.storage.PluginSettingsStorage;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +26,7 @@ import java.awt.*;
  * @author NanCheung
  */
 @Slf4j
-public class EditorLineReaderService {
+public class EditorLineReaderService extends UIEventSubscriber {
 
     private final PaginationManager paginationManager;
 
@@ -33,31 +35,10 @@ public class EditorLineReaderService {
      * 订阅阅读事件，当章节切换或分页时自动刷新编辑器
      */
     public EditorLineReaderService() {
+        super();
         this.paginationManager = PaginationManager.getInstance();
 
-        // 订阅事件
-        ApplicationManager.getApplication()
-                .getMessageBus()
-                .connect()
-                .subscribe(ReaderEventListener.TOPIC, (ReaderEventListener) EditorLineReaderService.this::onEvent);
-
         log.debug("EditorLineReaderService 已初始化");
-    }
-
-    /**
-     * 处理事件
-     * 根据事件类型执行不同的操作
-     *
-     * @param event 事件对象
-     */
-    private void onEvent(ReaderEvent event) {
-        switch (event) {
-            case ReadingEvent e -> onReadingEvent(e);
-            case PaginationEvent e -> onPaginationEvent(e);
-            default -> {
-                // 忽略其他事件类型
-            }
-        }
     }
 
     /**
@@ -66,30 +47,33 @@ public class EditorLineReaderService {
      *
      * @param event 阅读事件
      */
-    private void onReadingEvent(ReadingEvent event) {
-        if (event.type() == ReadingEvent.ReadingEventType.CHAPTER_LOADED) {
-            // 获取内容并重新分页
-            String content = event.content();
-
-            int pageSize = new JLabel().getFont().getSize() * 2;
-            paginationManager.paginate(content, pageSize);
-
-            // 根据方向定位页码
-            if (event.direction() == ReadingEvent.Direction.PREVIOUS) {
-                // 上一章，定位到最后一页
-                paginationManager.goToLastPage();
-                log.debug("上一章，定位到最后一页");
-            } else {
-                // 下一章或跳转，定位到第一页
-                paginationManager.goToFirstPage();
-                log.debug("下一章或跳转，定位到第一页");
-            }
-
-            // 刷新编辑器
-            refreshEditor();
-
-            log.info("EditorLine 事件处理完成：{}", event.chapter().getTitle());
+    @Override
+    protected void onReadingEvent(ReadingEvent event) {
+        if (event.type() != ReadingEvent.ReadingEventType.CHAPTER_LOADED) {
+            return;
         }
+
+        // 获取内容并重新分页
+        String content = event.content();
+
+        int pageSize = new JLabel().getFont().getSize() * 2;
+        paginationManager.paginate(content, pageSize);
+
+        // 根据方向定位页码
+        if (event.direction() == ReadingEvent.Direction.PREVIOUS) {
+            // 上一章，定位到最后一页
+            paginationManager.goToLastPage();
+            log.debug("上一章，定位到最后一页");
+        } else {
+            // 下一章或跳转，定位到第一页
+            paginationManager.goToFirstPage();
+            log.debug("下一章或跳转，定位到第一页");
+        }
+
+        // 刷新编辑器
+        refreshEditor();
+
+        log.info("EditorLine 事件处理完成：{}", event.chapter().getTitle());
     }
 
     /**
@@ -98,10 +82,31 @@ public class EditorLineReaderService {
      *
      * @param event 分页事件
      */
-    private void onPaginationEvent(PaginationEvent event) {
+    @Override
+    protected void onPaginationEvent(PaginationEvent event) {
         // 刷新编辑器显示新的页码
         refreshEditor();
         log.debug("分页事件：页码 {}/{}", event.currentPage(), event.totalPages());
+    }
+
+    /**
+     * 处理设置变更事件
+     * 当用户在设置页面保存字体设置后，触发编辑器重绘
+     *
+     * @param event 设置变更事件
+     */
+    @Override
+    protected void onSettingsChangedEvent(SettingsChangedEvent event) {
+        // 只处理字体设置变更
+        if (event.type() != SettingsChangedEvent.SettingsChangedType.FONT_SETTINGS
+                && event.type() != SettingsChangedEvent.SettingsChangedType.ALL_SETTINGS) {
+            return;
+        }
+
+        // 触发编辑器重绘（ReaderEditorLinePainter 会读取最新设置）
+        refreshEditor();
+
+        log.info("EditorLine 设置变更处理完成：字体样式已刷新");
     }
 
     /**

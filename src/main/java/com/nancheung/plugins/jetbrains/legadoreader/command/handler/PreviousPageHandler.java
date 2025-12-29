@@ -4,7 +4,6 @@ import com.nancheung.plugins.jetbrains.legadoreader.command.Command;
 import com.nancheung.plugins.jetbrains.legadoreader.command.CommandBus;
 import com.nancheung.plugins.jetbrains.legadoreader.command.CommandType;
 import com.nancheung.plugins.jetbrains.legadoreader.command.payload.CommandPayload;
-import com.nancheung.plugins.jetbrains.legadoreader.event.CommandEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.event.EventPublisher;
 import com.nancheung.plugins.jetbrains.legadoreader.event.PaginationEvent;
 import com.nancheung.plugins.jetbrains.legadoreader.service.IPaginationManager;
@@ -33,7 +32,7 @@ public class PreviousPageHandler implements CommandHandler<CommandPayload> {
         IPaginationManager.PageData currentPage = paginationManager.getCurrentPage();
 
         if (currentPage == null) {
-            publisher.publish(CommandEvent.failed(command, "当前没有分页数据"));
+            log.warn("当前没有分页数据");
             return;
         }
 
@@ -50,7 +49,6 @@ public class PreviousPageHandler implements CommandHandler<CommandPayload> {
                         totalPages,
                         prevPage.content()
                 ));
-                publisher.publish(CommandEvent.completed(command, null));
                 log.debug("翻到上一页: {}/{}", prevPage.pageIndex() + 1, totalPages);
             }
 
@@ -58,7 +56,6 @@ public class PreviousPageHandler implements CommandHandler<CommandPayload> {
             // 第一页，触发上一章
             log.debug("已经是第一页，切换到上一章");
             CommandBus.getInstance().dispatch(Command.of(CommandType.PREVIOUS_CHAPTER));
-            publisher.publish(CommandEvent.completed(command, null));
         }
     }
 }

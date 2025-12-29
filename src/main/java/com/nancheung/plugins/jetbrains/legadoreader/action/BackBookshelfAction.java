@@ -2,7 +2,7 @@ package com.nancheung.plugins.jetbrains.legadoreader.action;
 
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
-import com.nancheung.plugins.jetbrains.legadoreader.toolwindow.IndexUI;
+import com.nancheung.plugins.jetbrains.legadoreader.presentation.toolwindow.MainReaderPanel;
 import org.jetbrains.annotations.NotNull;
 
 public class BackBookshelfAction extends AnAction {
@@ -13,12 +13,12 @@ public class BackBookshelfAction extends AnAction {
     }
 
     private void backBookshelf() {
-        IndexUI indexUI = IndexUI.getInstance();
-        indexUI.refreshBookshelf(bookDTOS -> {
-        }, throwable -> {
-        });
+        MainReaderPanel mainPanel = MainReaderPanel.getInstance();
 
-        indexUI.getTextBodyPanel().setVisible(false);
-        indexUI.getBookshelfPanel().setVisible(true);
+        // 刷新书架
+        mainPanel.getBookshelfPanel().refreshBookshelf();
+
+        // 显示书架面板
+        mainPanel.showBookshelfPanel();
     }
 }
