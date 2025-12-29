@@ -2,14 +2,14 @@ package com.nancheung.plugins.jetbrains.legadoreader.presentation.settings;
 
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.ui.ComboBox;
-import com.intellij.ui.ColorPicker;
+import com.intellij.ui.ColorPanel;
 import com.intellij.ui.IdeBorderFactory;
 import com.intellij.ui.JBColor;
 import com.intellij.ui.components.*;
 import com.intellij.util.ui.FormBuilder;
 import com.intellij.util.ui.JBUI;
-import com.nancheung.plugins.jetbrains.legadoreader.storage.PluginSettingsStorage;
-import lombok.Getter;
+import com.nancheung.plugins.jetbrains.legadoreader.presentation.settings.components.CustomParamTablePanel;
+import com.nancheung.plugins.jetbrains.legadoreader.presentation.settings.validation.ValidationResult;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 
@@ -20,11 +20,14 @@ import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import java.awt.*;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Optional;
 
+/**
+ * 设置面板 - 纯 UI 组件
+ * 职责：渲染 UI、绑定事件、显示验证状态
+ * 不持有业务逻辑
+ */
 @Slf4j
-@Getter
 public class SettingsPanel {
 
     // ==================== 常量 ====================
@@ -36,30 +39,59 @@ public class SettingsPanel {
             Legado Reader是 开源阅读APP 的Jetbrains IDE插件版，旨在随时随地在IDE中进行阅读，为编码过程带来灵感和效率的提升。
             """;
 
+    // ViewModel 引用
+    private final SettingsViewModel viewModel;
+
     // ==================== 根面板 ====================
     private final JBPanel<?> rootPanel;
 
-    @Getter
-    private CustomParamPanel customParamPanel;
+    // 子组件（不暴露给外部）
+    private final CustomParamTablePanel customParamTablePanel;
     private JBCheckBox enableErrorLogCheckBox;
     private JBCheckBox enableInLineModelCheckBox;
 
     // ==================== 阅读界面设置组件 ====================
-    private JButton fontColorButton;
+    private ColorPanel fontColorButton;
     private ComboBox<String> fontNameComboBox;
     private JSpinner fontSizeSpinner;
     private JSpinner lineHeightSpinner;
     private JTextPane fontPreviewPane;
 
-    public SettingsPanel() {
-        // 1. 创建所有组件
+    public SettingsPanel(SettingsViewModel viewModel) {
+        this.viewModel = viewModel;
+
+        // 1. 创建子组件
+        this.customParamTablePanel = new CustomParamTablePanel();
         createComponents();
 
         // 2. 构建布局
-        rootPanel = createRootPanel();
+        this.rootPanel = createRootPanel();
 
-        // 3. 绑定事件监听器
-        bindEventListeners();
+        // 3. 绑定双向数据
+        bindToViewModel();
+
+        // 4. 监听验证结果
+        viewModel.addValidationListener(this::onValidationResult);
+    }
+
+    public JComponent getComponent() {
+        return rootPanel;
+    }
+
+    /**
+     * 刷新 UI（从 ViewModel 重新读取）
+     */
+    public void refresh() {
+        customParamTablePanel.setItems(viewModel.getCustomParams());
+        fontNameComboBox.setSelectedItem(viewModel.getFontName());
+        fontSizeSpinner.setValue(viewModel.getFontSize());
+        fontColorButton.setSelectedColor(viewModel.getFontColor());
+        lineHeightSpinner.setValue(viewModel.getLineHeight());
+        enableErrorLogCheckBox.setSelected(viewModel.isEnableErrorLog());
+        enableInLineModelCheckBox.setSelected(viewModel.isEnableInLineMode());
+
+        // 更新预览
+        updateFontPreview();
     }
 
     // ==================== 组件创建方法 ====================
@@ -70,8 +102,6 @@ public class SettingsPanel {
     }
 
     private void createGeneralSettingsComponents() {
-        customParamPanel = new CustomParamPanel();
-
         enableErrorLogCheckBox = new JBCheckBox("开启异常日志");
         enableErrorLogCheckBox.setToolTipText("报错时给出报错日志");
 
@@ -80,9 +110,8 @@ public class SettingsPanel {
     }
 
     private void createReadingInterfaceComponents() {
-        // 字体颜色按钮（仅作为触发器，不显示颜色）
-        fontColorButton = new JButton("选择颜色");
-        fontColorButton.setPreferredSize(JBUI.size(120, 25));
+        // 颜色选择按钮
+        fontColorButton = new ColorPanel();
 
         // 字体选择下拉框
         fontNameComboBox = createFontNameComboBox();
@@ -178,8 +207,8 @@ public class SettingsPanel {
         JBPanel<?> contentPanel = new JBPanel<>();
         contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
 
-        // 1. 自定义参数面板（最上方）
-        contentPanel.add(customParamPanel);
+        // 1. 自定义参数面板
+        contentPanel.add(customParamTablePanel);
         contentPanel.add(Box.createVerticalStrut(JBUI.scale(15)));
 
         // 2. 常规设置面板
@@ -213,12 +242,23 @@ public class SettingsPanel {
 
     @NotNull
     private JPanel createReadingInterfacePanel() {
+        // 颜色行
+        JPanel colorRow = new JPanel(new FlowLayout(FlowLayout.LEFT, JBUI.scale(5), 0));
+        colorRow.add(fontColorButton);
+
+        // 字体大小行：Spinner + 提示
+        JPanel fontSizeRow = new JPanel(new FlowLayout(FlowLayout.LEFT, JBUI.scale(5), 0));
+        fontSizeRow.add(fontSizeSpinner);
+        JBLabel hintLabel = new JBLabel("(0=使用编辑器默认)");
+        hintLabel.setForeground(JBColor.GRAY);
+        fontSizeRow.add(hintLabel);
+
         // 左侧表单
         JPanel formPanel = FormBuilder.createFormBuilder()
                 .setVerticalGap(JBUI.scale(5))
-                .addLabeledComponent(new JBLabel("正文字体颜色:"), fontColorButton, false)
+                .addLabeledComponent(new JBLabel("正文字体颜色:"), colorRow, false)
                 .addLabeledComponent(new JBLabel("正文字体:"), fontNameComboBox, false)
-                .addLabeledComponent(new JBLabel("正文字体大小 (0为默认):"), fontSizeSpinner, false)
+                .addLabeledComponent(new JBLabel("正文字体大小:"), fontSizeRow, false)
                 .addLabeledComponent(new JBLabel("正文字体行高:"), lineHeightSpinner, false)
                 .addComponentFillVertically(new JPanel(), 0)
                 .getPanel();
@@ -238,34 +278,52 @@ public class SettingsPanel {
         return contentPanel;
     }
 
-    // ==================== 事件监听方法 ====================
+    // ==================== 双向数据绑定 ====================
 
-    private void bindEventListeners() {
-        // 颜色选择器点击事件
-        fontColorButton.addActionListener(e -> openColorPicker());
+    private void bindToViewModel() {
+        // 双向绑定：UI 变化 → ViewModel 更新
+        enableErrorLogCheckBox.addActionListener(e ->
+                viewModel.setEnableErrorLog(enableErrorLogCheckBox.isSelected())
+        );
 
-        // 预览更新监听器
-        fontNameComboBox.addActionListener(e -> updateFontPreview());
-        fontSizeSpinner.addChangeListener(e -> updateFontPreview());
-        lineHeightSpinner.addChangeListener(e -> updateFontPreview());
+        enableInLineModelCheckBox.addActionListener(e ->
+                viewModel.setEnableInLineMode(enableInLineModelCheckBox.isSelected())
+        );
+
+        // 颜色选择
+        fontColorButton.addActionListener(e -> syncFontColor());
+
+        // 字体设置变化
+        fontNameComboBox.addActionListener(e -> {
+            viewModel.setFontName((String) fontNameComboBox.getSelectedItem());
+            updateFontPreview();
+        });
+
+        fontSizeSpinner.addChangeListener(e -> {
+            viewModel.setFontSize((int) fontSizeSpinner.getValue());
+            updateFontPreview();
+        });
+
+        lineHeightSpinner.addChangeListener(e -> {
+            viewModel.setLineHeight((double) lineHeightSpinner.getValue());
+            updateFontPreview();
+        });
+
+        // 自定义参数变化
+        customParamTablePanel.addChangeListener(viewModel::setCustomParams);
     }
 
     /**
-     * 打开颜色选择器
+     * 同步字体颜色
      */
-    private void openColorPicker() {
-        Color currentColor = fontPreviewPane.getForeground();
-        Color newColor = ColorPicker.showDialog(
-                rootPanel,
-                "选择字体颜色",
-                currentColor,
-                true,
-                null,
-                true
-        );
-        if (newColor != null) {
-            fontPreviewPane.setForeground(newColor);
+    private void syncFontColor() {
+        Color newColor = fontColorButton.getSelectedColor();
+        if (newColor == null) {
+            return;
         }
+
+        updateFontPreview(null,newColor,null);
+        viewModel.setFontColor(newColor);
     }
 
     private void updateFontPreview() {
@@ -280,18 +338,14 @@ public class SettingsPanel {
             double lineHeight = (double) lineHeightSpinner.getValue();
 
             updateFontPreview(new Font(fontName, Font.PLAIN, fontSize),
-                    new JBColor(fontPreviewPane.getForeground(), fontPreviewPane.getForeground()),
+                    new JBColor(fontColorButton.getSelectedColor(), fontColorButton.getSelectedColor()),
                     lineHeight);
         } catch (Exception e) {
             log.error("更新字体预览时出错", e);
         }
     }
 
-    private void updateFontPreview(PluginSettingsStorage.State state) {
-        updateFontPreview(state.textBodyFont, state.textBodyFontColor, state.textBodyLineHeight);
-    }
-
-    private void updateFontPreview(Font font, JBColor textBodyFontColor, Double lineHeight) {
+    private void updateFontPreview(Font font, Color textBodyFontColor, Double lineHeight) {
         ApplicationManager.getApplication().invokeLater(() -> {
             Optional.ofNullable(font).ifPresent(fontPreviewPane::setFont);
             Optional.ofNullable(textBodyFontColor).ifPresent(fontPreviewPane::setForeground);
@@ -308,31 +362,10 @@ public class SettingsPanel {
         doc.setParagraphAttributes(0, doc.getLength(), attrs, false);
     }
 
-    // ==================== 公共接口方法 ====================
+    // ==================== 验证结果处理 ====================
 
-    public JComponent getComponent() {
-        return rootPanel;
-    }
-
-    public void readSettings(PluginSettingsStorage.State state) {
-        if (state == null) {
-            return;
-        }
-
-        customParamPanel.setCustomParams(state.apiCustomParams);
-
-        fontSizeSpinner.setValue(state.textBodyFont.getSize());
-        fontNameComboBox.setSelectedItem(state.textBodyFont.getFontName());
-
-        lineHeightSpinner.setValue(state.textBodyLineHeight);
-
-        enableErrorLogCheckBox.setSelected(state.enableErrorLog);
-        enableInLineModelCheckBox.setSelected(state.enableShowBodyInLine);
-
-        updateFontPreview(state);
-    }
-
-    public List<PluginSettingsStorage.CustomParam> getCustomParams() {
-        return customParamPanel.getCustomParams();
+    private void onValidationResult(ValidationResult result) {
+        // 更新 UI 显示验证状态
+        customParamTablePanel.showValidationErrors(result);
     }
 }
