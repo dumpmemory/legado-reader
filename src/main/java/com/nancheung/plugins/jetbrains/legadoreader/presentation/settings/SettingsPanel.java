@@ -39,8 +39,8 @@ public class SettingsPanel {
     // ==================== 根面板 ====================
     private final JBPanel<?> rootPanel;
 
-    // ==================== 常规设置组件 ====================
-    private JBTextArea apiCustomParamTextArea;
+    @Getter
+    private CustomParamPanel customParamPanel;
     private JBCheckBox enableErrorLogCheckBox;
     private JBCheckBox enableInLineModelCheckBox;
 
@@ -51,7 +51,6 @@ public class SettingsPanel {
     private JSpinner lineHeightSpinner;
     private JTextPane fontPreviewPane;
 
-    // ==================== 构造函数 ====================
     public SettingsPanel() {
         // 1. 创建所有组件
         createComponents();
@@ -71,16 +70,13 @@ public class SettingsPanel {
     }
 
     private void createGeneralSettingsComponents() {
-        // API 自定义参数文本区
-        apiCustomParamTextArea = new JBTextArea(4, 30);
-        apiCustomParamTextArea.setLineWrap(true);
-        apiCustomParamTextArea.setWrapStyleWord(true);
+        customParamPanel = new CustomParamPanel();
 
-        // 复选框
         enableErrorLogCheckBox = new JBCheckBox("开启异常日志");
         enableErrorLogCheckBox.setToolTipText("报错时给出报错日志");
 
         enableInLineModelCheckBox = new JBCheckBox("是否开启行内阅读模式");
+        enableInLineModelCheckBox.setToolTipText("在代码行后显示章节内容");
     }
 
     private void createReadingInterfaceComponents() {
@@ -112,7 +108,7 @@ public class SettingsPanel {
         comboBox.setPreferredSize(size);
         comboBox.setMinimumSize(size);
 
-        // 使用字体自身渲染
+        // 展示字体自身样式
         comboBox.setRenderer(new DefaultListCellRenderer() {
             @Override
             public Component getListCellRendererComponent(JList<?> list, Object value,
@@ -178,16 +174,20 @@ public class SettingsPanel {
         JBPanel<?> panel = new JBPanel<>(new BorderLayout());
         panel.setBorder(JBUI.Borders.empty(10));
 
-        // 内容面板（垂直排列两个设置组）
+        // 内容面板（垂直排列三个设置组）
         JBPanel<?> contentPanel = new JBPanel<>();
         contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
 
-        // 常规设置面板
+        // 1. 自定义参数面板（最上方）
+        contentPanel.add(customParamPanel);
+        contentPanel.add(Box.createVerticalStrut(JBUI.scale(15)));
+
+        // 2. 常规设置面板
         JPanel generalPanel = createGeneralSettingsPanel();
         contentPanel.add(generalPanel);
         contentPanel.add(Box.createVerticalStrut(JBUI.scale(10)));
 
-        // 阅读界面设置面板
+        // 3. 阅读界面设置面板
         JPanel readingPanel = createReadingInterfacePanel();
         contentPanel.add(readingPanel);
 
@@ -201,18 +201,8 @@ public class SettingsPanel {
 
     @NotNull
     private JPanel createGeneralSettingsPanel() {
-        // API 参数区域
-        JBScrollPane apiParamScrollPane = new JBScrollPane(apiCustomParamTextArea);
-        apiParamScrollPane.setPreferredSize(JBUI.size(300, 80));
-
         JPanel panel = FormBuilder.createFormBuilder()
-                .addLabeledComponent(
-                        new JBLabel("自定义请求参数 (key:@value 换行区分)"),
-                        apiParamScrollPane,
-                        JBUI.scale(5),
-                        true
-                )
-                .addComponent(enableErrorLogCheckBox, JBUI.scale(10))
+                .addComponent(enableErrorLogCheckBox, JBUI.scale(5))
                 .addComponent(enableInLineModelCheckBox, JBUI.scale(5))
                 .getPanel();
 
@@ -279,23 +269,22 @@ public class SettingsPanel {
     }
 
     private void updateFontPreview() {
-            try {
-                String fontName = (String) fontNameComboBox.getSelectedItem();
+        try {
+            String fontName = (String) fontNameComboBox.getSelectedItem();
 
-                int fontSize = (int) fontSizeSpinner.getValue();
-                if (fontSize == 0) {
-                    fontSize = fontSizeSpinner.getFont().getSize();
-                }
-
-                double lineHeight = (double) lineHeightSpinner.getValue();
-
-                updateFontPreview(new Font(fontName, Font.PLAIN, fontSize),
-                        new JBColor(fontPreviewPane.getForeground(), fontPreviewPane.getForeground()),
-                        lineHeight);
-            } catch (Exception e) {
-                // 忽略预览更新异常
-                log.error("更新字体预览时出错", e);
+            int fontSize = (int) fontSizeSpinner.getValue();
+            if (fontSize == 0) {
+                fontSize = fontSizeSpinner.getFont().getSize();
             }
+
+            double lineHeight = (double) lineHeightSpinner.getValue();
+
+            updateFontPreview(new Font(fontName, Font.PLAIN, fontSize),
+                    new JBColor(fontPreviewPane.getForeground(), fontPreviewPane.getForeground()),
+                    lineHeight);
+        } catch (Exception e) {
+            log.error("更新字体预览时出错", e);
+        }
     }
 
     private void updateFontPreview(PluginSettingsStorage.State state) {
@@ -330,21 +319,20 @@ public class SettingsPanel {
             return;
         }
 
-        if (!state.apiCustomParam.isEmpty()) {
-            apiCustomParamTextArea.setText(state.apiCustomParam);
-        }
-
+        customParamPanel.setCustomParams(state.apiCustomParams);
 
         fontSizeSpinner.setValue(state.textBodyFont.getSize());
         fontNameComboBox.setSelectedItem(state.textBodyFont.getFontName());
 
         lineHeightSpinner.setValue(state.textBodyLineHeight);
 
-        // 复选框
         enableErrorLogCheckBox.setSelected(state.enableErrorLog);
         enableInLineModelCheckBox.setSelected(state.enableShowBodyInLine);
 
-        // 更新预览
         updateFontPreview(state);
+    }
+
+    public List<PluginSettingsStorage.CustomParam> getCustomParams() {
+        return customParamPanel.getCustomParams();
     }
 }

@@ -1,8 +1,6 @@
 package com.nancheung.plugins.jetbrains.legadoreader.api;
 
 import cn.hutool.core.lang.TypeReference;
-import cn.hutool.core.text.StrPool;
-import cn.hutool.core.util.StrUtil;
 import cn.hutool.core.util.URLUtil;
 import cn.hutool.http.HttpResponse;
 import cn.hutool.http.HttpUtil;
@@ -123,25 +121,22 @@ public class ApiUtil {
 
     /**
      * 解析 API 自定义参数
-     * 格式：参数名:@参数值（每行一个）
+     * 从参数列表中过滤并转换为 Map
+     * 允许参数值为空，只过滤空参数名
      *
      * @return 参数 Map
      */
     private static Map<String, Object> parseCustomParams() {
-        String param = PluginSettingsStorage.getInstance().getState().apiCustomParam;
-        if (StrUtil.isBlank(param)) {
-            return Map.of();
-        }
+        List<PluginSettingsStorage.CustomParam> params =
+                PluginSettingsStorage.getInstance().getState().apiCustomParams;
 
-        // 按照回车符分割，取出所有自定义参数
-        List<String> apiCustomParamList = StrUtil.split(param, "\n");
-
-        // 按照 :@ 分割，取出参数名和参数值,转成map
-        return apiCustomParamList.stream()
-                .filter(StrUtil::isNotEmpty)
-                .filter(s -> s.contains(StrPool.COLON + StrPool.AT))
-                .map(s -> StrUtil.split(s, StrPool.COLON + StrPool.AT))
-                .collect(Collectors.toMap(List::getFirst, l -> l.get(1), (a, b) -> b));
+        return params.stream()
+                .filter(p -> p.name != null && !p.name.trim().isEmpty())  // 只过滤空参数名
+                .collect(Collectors.toMap(
+                        p -> p.name,
+                        p -> p.value != null ? p.value : "",  // value 为 null 时使用空字符串
+                        (a, b) -> b  // 重复键时保留后者
+                ));
     }
 
 }

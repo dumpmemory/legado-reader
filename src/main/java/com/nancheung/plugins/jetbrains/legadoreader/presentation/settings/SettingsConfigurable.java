@@ -1,5 +1,6 @@
 package com.nancheung.plugins.jetbrains.legadoreader.presentation.settings;
 
+import com.intellij.openapi.options.ConfigurationException;
 import com.intellij.openapi.options.SearchableConfigurable;
 import com.intellij.ui.JBColor;
 import com.nancheung.plugins.jetbrains.legadoreader.common.Constant;
@@ -12,7 +13,10 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 public class SettingsConfigurable implements SearchableConfigurable {
 
@@ -59,18 +63,15 @@ public class SettingsConfigurable implements SearchableConfigurable {
         Font uiFont = ui.getFontPreviewPane().getFont();
         boolean fontModified = !Objects.equals(state.textBodyFont, uiFont);
 
-        String currentCustomParam = ui.getApiCustomParamTextArea().getText();
-        String storedCustomParam = state.apiCustomParam == null ? "" : state.apiCustomParam;
-        boolean customParamModified = !currentCustomParam.equals(storedCustomParam);
+        List<PluginSettingsStorage.CustomParam> currentParams = ui.getCustomParams();
+        boolean customParamModified = !currentParams.equals(state.apiCustomParams);
 
         boolean errorLogModified = Boolean.TRUE.equals(state.enableErrorLog) != ui.getEnableErrorLogCheckBox().isSelected();
 
         boolean inLineModelModified = Boolean.TRUE.equals(state.enableShowBodyInLine) != ui.getEnableInLineModelCheckBox().isSelected();
 
-        // 行高比较（注意精度问题）
         double currentLineHeight = (double) ui.getLineHeightSpinner().getValue();
-        double storedLineHeight = state.textBodyLineHeight != null ? state.textBodyLineHeight : 1.5;
-        boolean lineHeightModified = Math.abs(currentLineHeight - storedLineHeight) > 0.001;
+        boolean lineHeightModified = Math.abs(currentLineHeight - state.textBodyLineHeight) > 0.001;
 
         return fontColorModified || fontModified || customParamModified ||
                 errorLogModified || inLineModelModified || lineHeightModified;
@@ -78,18 +79,50 @@ public class SettingsConfigurable implements SearchableConfigurable {
 
     @Override
     public void reset() {
-        // 重置为上次保存的值
         if (settingsPanel != null) {
             settingsPanel.readSettings(PluginSettingsStorage.getInstance().getState());
         }
     }
 
     @Override
-    public void apply() {
-        // 保存设置
+    public void apply() throws ConfigurationException {
+        SettingsPanel ui = instance();
+
+        // 1. UI层验证检查（快速失败）
+        if (ui.getCustomParamPanel().hasValidationErrors()) {
+            throw new ConfigurationException(
+                "请修正自定义API请求头中的错误后再保存",
+                "自定义API请求头配置错误"
+            );
+        }
+
+        // 2. 最终验证（保险机制）
+        List<PluginSettingsStorage.CustomParam> params = ui.getCustomParams();
+        Set<String> paramNames = new HashSet<>();
+        for (PluginSettingsStorage.CustomParam param : params) {
+            String name = param.name.trim();
+
+            // 验证1：空检查
+            if (name.isEmpty()) {
+                throw new ConfigurationException(
+                    "参数名不能为空",
+                    "自定义API请求头配置错误"
+                );
+            }
+
+            // 验证2：重复检查
+            if (!paramNames.add(name)) {
+                throw new ConfigurationException(
+                    "自定义参数名重复: " + name,
+                    "自定义API请求头配置错误"
+                );
+            }
+        }
+
+        // 3. 保存设置
         saveSettings();
 
-        // 发布设置变更事件，通知 UI 更新
+        // 4. 发布设置变更事件，通知 UI 更新
         PluginSettingsStorage storage = PluginSettingsStorage.getInstance();
         JBColor fontColor = storage.getState().textBodyFontColor;
         Font font = storage.getState().textBodyFont;
@@ -115,12 +148,12 @@ public class SettingsConfigurable implements SearchableConfigurable {
 
     public void saveSettings() {
         SettingsPanel ui = instance();
-        // 直接修改 State 字段，框架会自动持久化
         PluginSettingsStorage.State state = PluginSettingsStorage.getInstance().getState();
         if (state == null) {
             return;
         }
-        state.apiCustomParam = ui.getApiCustomParamTextArea().getText();
+
+        state.apiCustomParams = ui.getCustomParams();
 
         Color foreground = ui.getFontPreviewPane().getForeground();
         state.textBodyFontColor = new JBColor(foreground,foreground);

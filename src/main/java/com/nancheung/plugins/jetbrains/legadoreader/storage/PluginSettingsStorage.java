@@ -11,10 +11,15 @@ import com.intellij.ui.JBColor;
 import com.intellij.util.xmlb.annotations.OptionTag;
 import com.nancheung.plugins.jetbrains.legadoreader.storage.converter.FontConverter;
 import com.nancheung.plugins.jetbrains.legadoreader.storage.converter.JBColorConverter;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -26,6 +31,30 @@ import java.util.Objects;
 @Service
 @State(name = "LegadoReaderSettings", storages = @Storage("nancheung-legadoReader-settings.xml"))
 public final class PluginSettingsStorage implements PersistentStateComponent<PluginSettingsStorage.State> {
+
+    /**
+     * 自定义 API 参数数据类
+     */
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class CustomParam {
+        public String name = "";
+        public String value = "";
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            CustomParam that = (CustomParam) o;
+            return Objects.equals(name, that.name) && Objects.equals(value, that.value);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(name, value);
+        }
+    }
 
     /**
      * 内部状态类，用于 XML 序列化
@@ -53,11 +82,12 @@ public final class PluginSettingsStorage implements PersistentStateComponent<Plu
         public Double textBodyLineHeight = 1.5;
 
         /**
-         * API 自定义参数
+         * API 自定义参数列表
          */
-        public String apiCustomParam = """
-                source:@legado-reader
-                accessToken:@nanchueng""";
+        public List<CustomParam> apiCustomParams = new ArrayList<>(List.of(
+                new CustomParam("source", "legado-reader"),
+                new CustomParam("accessToken", "nanchueng")
+        ));
 
         /**
          * 是否启用错误日志
@@ -77,7 +107,7 @@ public final class PluginSettingsStorage implements PersistentStateComponent<Plu
             return Objects.equals(textBodyFontColor, state.textBodyFontColor) &&
                     Objects.equals(textBodyFont, state.textBodyFont) &&
                     Objects.equals(textBodyLineHeight, state.textBodyLineHeight) &&
-                    Objects.equals(apiCustomParam, state.apiCustomParam) &&
+                    Objects.equals(apiCustomParams, state.apiCustomParams) &&
                     Objects.equals(enableErrorLog, state.enableErrorLog) &&
                     Objects.equals(enableShowBodyInLine, state.enableShowBodyInLine);
         }
@@ -85,7 +115,7 @@ public final class PluginSettingsStorage implements PersistentStateComponent<Plu
         @Override
         public int hashCode() {
             return Objects.hash(textBodyFontColor, textBodyFont, textBodyLineHeight,
-                    apiCustomParam, enableErrorLog, enableShowBodyInLine);
+                    apiCustomParams, enableErrorLog, enableShowBodyInLine);
         }
     }
 
